@@ -1,6 +1,8 @@
 import { Tabs } from 'expo-router';
 import { SessionProvider } from '../components/SessionProvider';
 import { Ionicons } from '@expo/vector-icons';
+import { View } from 'react-native';
+import { ConsentPreview } from '../../../packages/consent-preview/ConsentPreview';
 
 const icons: Record<string, keyof typeof Ionicons.glyphMap> = {
   index: 'home-outline', engine: 'scan-outline', permissions: 'shield-checkmark-outline',
@@ -12,7 +14,7 @@ export default function Layout() {
 }
 function MobileTabs() {
   return (
-    <Tabs screenOptions={({ route }) => ({
+    <View style={{ flex: 1 }}><Tabs screenOptions={({ route }) => ({
       headerShown: false,
       tabBarStyle: { backgroundColor: '#0b0b0d', borderTopColor: '#3a2114', height: 66, paddingTop: 5 },
       tabBarActiveTintColor: '#ff6a00', tabBarInactiveTintColor: '#9c8c82',
@@ -27,6 +29,6 @@ function MobileTabs() {
       <Tabs.Screen name="settings" options={{ title: 'Settings' }} />
       <Tabs.Screen name="account" options={{ title: 'Account', href: null }} />
       <Tabs.Screen name="my-devices" options={{ title: 'My Devices', href: null }} />
-    </Tabs>
+    </Tabs><ConsentPreview /></View>
   );
 }
