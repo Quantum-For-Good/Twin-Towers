@@ -15,9 +15,9 @@ class FakeBinding(var account: String? = null) : DeviceBindingStore {
   override fun boundAccount() = account
   override fun bind(accountId: String) { account = accountId }
 }
-class FakeAuthority(var result: AuthorityResult) : AuthorityClient {
+class FakeAuthority(var result: AuthorityResult, private val beforeFetch: () -> Unit = {}) : AuthorityClient {
   val calls = AtomicInteger()
-  override fun fetch(session: Session): AuthorityResult { calls.incrementAndGet(); return result }
+  override fun fetch(session: Session): AuthorityResult { calls.incrementAndGet(); beforeFetch(); return result }
 }
 class FakeUploader(var next: () -> UploadResult = { UploadResult.Accepted }) : BatchUploader {
   val batches = ArrayList<Batch>()

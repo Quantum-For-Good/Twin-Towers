@@ -2,6 +2,8 @@ package com.datastorm.kicks.vpn.core
 
 import org.junit.Assert.*
 import org.junit.Test
+import java.util.concurrent.CountDownLatch
+import java.util.concurrent.TimeUnit
 
 class AuthorizationAtStartTest {
   private fun denied(h: Harness, reason: Reason) {
@@ -223,12 +225,29 @@ class NetworkChangeAndShutdownTest {
   }
 
   @Test fun workerHaltsAndStopsControllerWhenSessionRevokedRemotely() {
-    val h = Harness(); h.startOk()
-    h.authority.result = AuthorityResult.Rejected(Reason.SESSION_REVOKED)
-    val deadline = System.currentTimeMillis() + 3_000
-    while (h.controller.state != State.STOPPED && System.currentTimeMillis() < deadline) Thread.sleep(10)
-    assertEquals(Reason.SESSION_REVOKED, h.controller.reason)
-    assertTrue(h.controller.awaitShutdown(2_000))
+    val testThread = Thread.currentThread()
+    val workerChecking = CountDownLatch(1)
+    val releaseWorker = CountDownLatch(1)
+    val authority = FakeAuthority(okResponse()) {
+      if (Thread.currentThread() !== testThread) {
+        workerChecking.countDown()
+        releaseWorker.await()
+      }
+    }
+    val h = Harness(authority = authority)
+    try {
+      assertTrue(h.startOk() is Decision.Allow)
+      assertTrue("worker did not check authority", workerChecking.await(5, TimeUnit.SECONDS))
+      authority.result = AuthorityResult.Rejected(Reason.SESSION_REVOKED)
+      releaseWorker.countDown()
+      assertTrue("worker did not halt", h.controller.awaitShutdown(5_000))
+      assertEquals(State.STOPPED, h.controller.state)
+      assertEquals(Reason.SESSION_REVOKED, h.controller.reason)
+    } finally {
+      releaseWorker.countDown()
+      h.controller.explicitStop()
+      assertTrue("worker did not shut down", h.controller.awaitShutdown(5_000))
+    }
   }
 
   @Test fun restartAfterStopWorks() {
