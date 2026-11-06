@@ -1,0 +1,2 @@
+# KICK'S — Android app
+Expo SDK 57 / React Native 0.86.2 / React 19.2.3 / Expo Router / TypeScript. Native layer: Kotlin VpnService DNS collector (TUN 10.111.222.2/32, port 53 only), Keystore secure storage, foreground notification "KICK'S privacy monitoring". Tabs: Activity · Engine (exfiltration feed) · Permissions · Opportunities · Wallet · Settings. Consent flow: Ask / Modify / Receipt. Reduced version target: Tuesday, November 24, 2026. Android-first for DNS monitoring.
