@@ -54,3 +54,36 @@ Destination: this repo, branch `android/collector-bringover` → main (draft PR)
 Draft. Nothing here is merged. The collector code is as-written on PR #62;
 it has not been verified on a device from this repo, and the API is
 incomplete pending the auth-model decision above.
+
+## Addendum — 2026-11-06: auth decision made, device-bearer server added
+
+Ezekiel decided: **device-bearer wins**. `services/api/src/server.ts` is now
+in this branch, built from old-repo main (`e100794`, PR #87) — device Bearer
+auth (SHA-256 tokenHash), `CollectorAuthorizationService`, consent/device/
+metadata repositories, **no OIDC code anywhere**. Reworked onto device-bearer:
+
+- `POST /v1/devices/enroll` mints the device bearer token (bootstrap outside
+  production; production enrollment needs the account credential flow, not
+  built yet). A deviceId bound to another subject → 403
+  `device_owned_by_another_account`.
+- `GET /v1/collector/eligibility` — the contract the Android native collector
+  expects (sessionActive, accountId, deviceOwnerAccountId, consentState,
+  consentId, consentPurpose, dataSharing). `POST /v1/collector/eligibility`
+  (informational, from main) is kept alongside it.
+- `PUT /v1/data-sharing` — the data-sharing choice, separate from consent.
+- `apps/android/services/identityApi.ts`: enroll now sends `subjectId` and
+  stores the minted device token in the native session (not the sign-in
+  credential). `start.ts` stays the memory-store entrypoint; main's
+  Postgres-wiring `start.ts` is not used until a database is provisioned.
+- `package-lock.json` regenerated: the brought-over lockfile did not list
+  `@kicks/mobile`, so `npm ci` failed at the root. Root `package.json` build
+  path fixed (`apps/mobile/dist` → `apps/android/dist`).
+- `apps/android/assets/kicks-mascot.png` added (binary — upload via web UI,
+  never via a text snapshot push). The web build (`expo export`) fails
+  without it; it passes with it.
+
+Verified locally 2026-11-06: root `npm run typecheck` passes (both
+workspaces), API tests 15/15 pass, `npm run build` passes with the mascot.
+No CI has run in this repo yet — `.github/workflows/quality.yml` is in this
+branch (verify + collector-core jobs, collector-core path adapted to
+`apps/android/...`) and runs on the PR once pushed.
