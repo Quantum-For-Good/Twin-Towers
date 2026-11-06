@@ -1,9 +1,13 @@
 import { NativeModules } from 'react-native';
 
 /**
- * Provider-agnostic glue between an OIDC sign-in (AppAuth or the vendor SDK, not yet selected) and the
- * native collector. The sign-in step itself is the remaining external blocker; this file only handles
- * what happens with its result.
+ * Device-bearer glue between account sign-in and the native collector.
+ * Enrollment mints the device bearer token on the server (POST
+ * /v1/devices/enroll, device-bearer model — no IdP/OIDC token is verified by
+ * the API); the native session stores THAT token, because the collector
+ * authenticates every eligibility/metadata call with it. The sign-in step
+ * itself is the remaining external blocker; this file only handles what
+ * happens with its result.
  */
 export interface SignedInSession { accountId: string; accessToken: string; expiresAtMs: number }
 
@@ -14,12 +18,16 @@ export async function enrollDevice(apiBase: string, deviceId: string, session: S
   const res = await fetch(`${apiBase.replace(/\/$/, '')}/v1/devices/enroll`, {
     method: 'POST',
     headers: { authorization: ['Bearer', session.accessToken].join(' '), 'content-type': 'application/json' },
-    body: JSON.stringify({ deviceId })
+    body: JSON.stringify({ deviceId, subjectId: session.accountId })
   });
   if (res.status === 403) return 'device_owned_by_another_account';
   if (!res.ok) throw new Error(`Enrollment failed (${res.status}).`);
+  // The server mints the device bearer token; that token — not the sign-in
+  // credential — is what the native collector authenticates with.
+  const enrolled = await res.json().catch(() => ({}));
+  const deviceToken = typeof enrolled.token === 'string' && enrolled.token ? enrolled.token : session.accessToken;
   // Native setSession also rejects a locally cross-bound account (DEVICE_OWNED_BY_OTHER_ACCOUNT).
-  await native().setSession(session.accountId, deviceId, session.accessToken, session.expiresAtMs);
+  await native().setSession(session.accountId, deviceId, deviceToken, session.expiresAtMs);
   return 'enrolled';
 }
 
