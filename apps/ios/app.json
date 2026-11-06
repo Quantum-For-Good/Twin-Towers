@@ -1,0 +1,30 @@
+{
+  "expo": {
+    "name": "KICK’S",
+    "slug": "ezekiel-ios",
+    "owner": "datastorm-inc",
+    "scheme": "kicks",
+    "version": "0.2.6",
+    "orientation": "portrait",
+    "userInterfaceStyle": "automatic",
+    "plugins": [
+      "expo-router"
+    ],
+    "android": {
+      "package": "com.datastorm.kicks",
+      "adaptiveIcon": {
+        "backgroundColor": "#081A18"
+      }
+    },
+    "extra": {
+      "trafficMode": "demo",
+      "eas": {
+        "projectId": "1d2a0901-41c9-4026-b835-139e785db502"
+      }
+    },
+    "ios": {
+      "bundleIdentifier": "com.datastorm.kicks",
+      "supportsTablet": true
+    }
+  }
+}
