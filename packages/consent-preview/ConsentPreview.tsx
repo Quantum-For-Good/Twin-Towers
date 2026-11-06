@@ -15,7 +15,15 @@ export function ConsentPreview() {
   const [selection, setSelection] = useState<Selection>({ ...initialSelection });
   const [privacy, setPrivacy] = useState(5);
   const [exampleRevoked, setExampleRevoked] = useState(false);
-  const close = () => { setOpen(false); setScreen('ask'); setExampleRevoked(false); };
+  const [detailsOpen, setDetailsOpen] = useState(true);
+  const close = () => {
+    setOpen(false);
+    setScreen('ask');
+    setSelection({ ...initialSelection });
+    setPrivacy(5);
+    setExampleRevoked(false);
+    setDetailsOpen(true);
+  };
 
   return <>
     <Pressable accessibilityRole="button" accessibilityLabel="Open example consent request" onPress={() => setOpen(true)} style={s.floating}>
@@ -33,10 +41,24 @@ export function ConsentPreview() {
             {screen === 'ask' && <>
               <Text style={s.body}>A sample shoe recommendation request for 12 runs. Choose what you would share before deciding.</Text>
               <View style={s.card}>
-                <Text style={s.label}>ILLUSTRATIVE PARTNER · NIKE</Text>
-                <Text style={s.cardTitle}>Personalized shoe recommendation</Text>
-                <Text style={s.body}>Example: 12 runs, ${exampleValue(selection)} credit, 24-hour access followed by automatic revocation.</Text>
-                <Text style={s.small}>Example verified badge · This is not a verified live offer.</Text>
+                <Pressable
+                  accessibilityRole="button"
+                  accessibilityLabel="Example request details"
+                  accessibilityState={{ expanded: detailsOpen }}
+                  aria-expanded={detailsOpen}
+                  onPress={() => setDetailsOpen(current => !current)}
+                  style={s.row}
+                >
+                  <View style={s.grow}>
+                    <Text style={s.label}>ILLUSTRATIVE PARTNER · NIKE</Text>
+                    <Text style={s.cardTitle}>Personalized shoe recommendation</Text>
+                  </View>
+                  <Text style={s.chevron}>{detailsOpen ? '−' : '+'}</Text>
+                </Pressable>
+                {detailsOpen && <>
+                  <Text style={s.body}>Example: 12 runs, ${exampleValue(selection)} credit, 24-hour access followed by automatic revocation.</Text>
+                  <Text style={s.small}>Example verified badge · This is not a verified live offer.</Text>
+                </>}
               </View>
               <Text style={s.label}>$5 OPPORTUNITY LABEL · EXAMPLE</Text>
               <Text style={s.small}>Amounts and partners are illustrative, not an offer or earnings promise. Granting consent never starts monitoring.</Text>
@@ -100,7 +122,7 @@ const s = StyleSheet.create({
   floating: { position: 'absolute', right: 18, bottom: 82, backgroundColor: '#111827', borderRadius: 28, paddingHorizontal: 22, height: 50, justifyContent: 'center', elevation: 8, shadowColor: '#000', shadowOpacity: 0.18, shadowRadius: 10, shadowOffset: { width: 0, height: 4 } },
   floatingText: { color: '#fff', fontSize: 13, fontWeight: '800', letterSpacing: 1 },
   scrim: { flex: 1, backgroundColor: 'rgba(15,23,42,0.55)', justifyContent: 'flex-end' },
-  sheet: { backgroundColor: '#f6f8fc', borderTopLeftRadius: 28, borderTopRightRadius: 28, maxHeight: '90%' },
+  sheet: { backgroundColor: '#f6f8fc', borderTopLeftRadius: 28, borderTopRightRadius: 28, maxHeight: '90%', width: '100%', maxWidth: 600, alignSelf: 'center' },
   header: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'flex-start', paddingHorizontal: 22, paddingTop: 22, gap: 12 },
   kicker: { color: '#2563eb', fontWeight: '800', fontSize: 10, letterSpacing: 1 },
   title: { color: '#111827', fontWeight: '800', fontSize: 25, marginTop: 5 },
@@ -116,6 +138,7 @@ const s = StyleSheet.create({
   small: { color: '#64748b', fontSize: 12, lineHeight: 18 },
   row: { flexDirection: 'row', alignItems: 'center', gap: 12, paddingVertical: 6 },
   grow: { flex: 1 },
+  chevron: { color: '#2563eb', fontSize: 24, fontWeight: '600', minWidth: 28, textAlign: 'center' },
   rowTitle: { color: '#111827', fontWeight: '700', fontSize: 15 },
   actions: { flexDirection: 'row', justifyContent: 'space-between', gap: 10 },
   button: { minHeight: 48, borderRadius: 12, backgroundColor: '#111827', alignItems: 'center', justifyContent: 'center', paddingHorizontal: 16, flexGrow: 1 },
