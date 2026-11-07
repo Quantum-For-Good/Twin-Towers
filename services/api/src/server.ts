@@ -68,11 +68,9 @@ export function buildServer(options:{store?:Store;adminSecret?:string;intelligen
   // token itself. A deviceId already bound to a different subject is rejected with
   // 403 device_owned_by_another_account. An already-enrolled caller may enroll a
   // further device for the same account by presenting one of its device tokens.
-  // First-time (bootstrap) enrollment without an existing device credential is
-  // enabled only outside production (KICKS_ENABLE_DEVICE_ENROLLMENT=true
-  // overrides); production enrollment must come from the account credential
-  // flow, which is not built yet, so the bootstrap stays off in production.
-  const deviceEnrollmentAllowed = process.env.KICKS_ENABLE_DEVICE_ENROLLMENT === 'true' || (process.env.KICKS_ENABLE_DEVICE_ENROLLMENT !== 'false' && process.env.NODE_ENV !== 'production');
+  // First-time bootstrap enrollment is never available in production; an
+  // environment flag must not bypass the missing account/device proof flow.
+  const deviceEnrollmentAllowed = process.env.NODE_ENV !== 'production' && process.env.KICKS_ENABLE_DEVICE_ENROLLMENT !== 'false';
   app.post('/v1/devices/enroll', async (q, r) => {
     const parsed = z.object({ deviceId: z.string().uuid(), subjectId: z.string().uuid().optional() }).strict().safeParse(q.body);
     if (!parsed.success) return r.code(400).send({ error: 'invalid_request' });
@@ -86,9 +84,8 @@ export function buildServer(options:{store?:Store;adminSecret?:string;intelligen
         if (subjectId && subjectId !== authedDevice.subjectId) return r.code(403).send({ error: 'device_owned_by_another_account' });
         subjectId = authedDevice.subjectId;
       }
-      // An unrecognized bearer is a sign-in credential, not a device token:
-      // it does not authenticate here and the request falls through to the
-      // bootstrap path below instead of failing outright.
+      // An unrecognized bearer is not an enrollment credential. It may only
+      // reach the non-production bootstrap path below.
     }
     if (!subjectId) return r.code(400).send({ error: 'subject_required' });
     if (!deviceEnrollmentAllowed && !authedDevice) return r.code(403).send({ error: 'device_enrollment_disabled' });
