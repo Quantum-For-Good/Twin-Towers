@@ -7,16 +7,15 @@ dedicated setting. Without it, local development uses in-memory stores.
 upgrade or data-migration path; do not apply it to an existing database. The
 older `schema.sql` is not a migration.
 
-The foundation preserves compatibility with the current device, consent and
-metadata repositories. Nullable study fields are not an authorization contract:
-study scope, expiry, ownership, data-sharing persistence and the chain-independent
-eligibility oracle must be implemented and verified before enabling real grants.
-Data-sharing routes use the PostgreSQL repository, and metadata ingestion checks
-the sharing state under the same subject lock used by updates. Turning sharing
-off stops local collectors through the configured stop hook; native queued-data
-purge and 15-second authority polling still need end-to-end verification.
-The existing evidence provider still requires chain proof; this work does not
-change that behavior.
+The API persists consent scope and expiry, stores data-sharing independently from
+consent, and exposes a chain-independent eligibility decision. Metadata ingestion
+rechecks the active device, unexpired purpose consent and sharing state in its
+transaction. These guarantees still require the disposable PostgreSQL integration
+test before durable behavior is considered verified. Device keypair-signed
+enrollment is not implemented; production bootstrap enrollment is disabled.
+Turning sharing off stops local collectors through the configured stop hook;
+native queued-data purge and 15-second authority polling still need end-to-end
+verification. The separate evidence-provider path still requires chain proof.
 
 The integration test only accepts `KICKS_DISPOSABLE_DATABASE_URL` with host
 `127.0.0.1`, port `5433`, database `kicks_disposable_test`, and no URL query
@@ -26,6 +25,7 @@ The test creates and removes a uniquely named schema within that database. Run
 `npm run test --workspace @kicks/api` with the variable set. Without it, the
 integration test is explicitly skipped, not passed.
 
-The approved D: drive runbook and an existing migration runner are not present
-in this checkout. Until the integration test is run on the designated disposable
-database, the SQL migration and restart guarantees remain unverified.
+The approved D: drive runbook is not present in this checkout. The migration
+runner is implemented in `src/migrations.ts`; until the integration test is run
+on the designated disposable database, the SQL migration and restart guarantees
+remain unverified.
