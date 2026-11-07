@@ -600,6 +600,29 @@ test('enrollment rejects a device owned by another account', async () => {
   await app.close();
 });
 
+test('production enrollment cannot be enabled by the bootstrap environment flag', async () => {
+  const previousNodeEnv = process.env.NODE_ENV;
+  const previousEnrollmentFlag = process.env.KICKS_ENABLE_DEVICE_ENROLLMENT;
+  process.env.NODE_ENV = 'production';
+  process.env.KICKS_ENABLE_DEVICE_ENROLLMENT = 'true';
+  const app = buildServer();
+  try {
+    const response = await app.inject({
+      method: 'POST',
+      url: '/v1/devices/enroll',
+      payload: { deviceId: randomUUID(), subjectId: randomUUID() }
+    });
+    assert.equal(response.statusCode, 403);
+    assert.equal(response.json().error, 'device_enrollment_disabled');
+  } finally {
+    await app.close();
+    if (previousNodeEnv === undefined) delete process.env.NODE_ENV;
+    else process.env.NODE_ENV = previousNodeEnv;
+    if (previousEnrollmentFlag === undefined) delete process.env.KICKS_ENABLE_DEVICE_ENROLLMENT;
+    else process.env.KICKS_ENABLE_DEVICE_ENROLLMENT = previousEnrollmentFlag;
+  }
+});
+
 test('GET eligibility returns the collector gate view for the native client', async () => {
   const { app, store, token } = await setup();
   const headers = { authorization: `Bearer ${token}` };
