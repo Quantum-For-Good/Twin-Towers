@@ -1,9 +1,67 @@
 import test from 'node:test';import assert from 'node:assert/strict';import{buildServer,memoryStore}from'./server.js';import{randomUUID}from'node:crypto';
 import{simulatedAuth}from'./test-support.js';
+import type { DataSharingRepository } from './data-sharing-repository.js';
+import type { ConsentRepository } from './consent-repository.js';
 const setup=async()=>{const store=memoryStore(),app=buildServer({store,adminSecret:'staging-secret',collectorAuthorization:simulatedAuth()}),subjectId=randomUUID();const r=await app.inject({method:'POST',url:'/v1/staging/devices',headers:{'x-admin-secret':'staging-secret'},payload:{subjectId}});return{app,store,token:r.json().token as string}};
 test('health reports metadata-only staging',async()=>{const app=buildServer(),r=await app.inject({method:'GET',url:'/health'});assert.equal(r.json().collector,'metadata-only');await app.close()});
 test('serves web app index.html on root path',async()=>{const app=buildServer(),r=await app.inject({method:'GET',url:'/'});assert.equal(r.statusCode,200);assert.match(r.headers['content-type']??'',/text\/html/);await app.close()});
 test('zero trust denies unauthenticated consent writes',async()=>{const app=buildServer(),r=await app.inject({method:'POST',url:'/v1/consent-events',payload:{}});assert.equal(r.statusCode,401);await app.close()});
+test('data-sharing route reads and writes the configured durable repository', async () => {
+  const store = memoryStore();
+  let enabled = false;
+  const repository: DataSharingRepository = {
+    async get() { return enabled; },
+    async set(_subjectId, value) { enabled = value; }
+  };
+  const app = buildServer({ store, dataSharingRepository: repository, adminSecret: 'staging-secret' });
+  const enrolled = await app.inject({ method: 'POST', url: '/v1/staging/devices', headers: { 'x-admin-secret': 'staging-secret' }, payload: { subjectId: randomUUID() } });
+  const headers = { authorization: `Bearer ${enrolled.json().token as string}` };
+  try {
+    assert.equal((await app.inject({ method: 'GET', url: '/v1/collector/eligibility', headers })).json().dataSharing, false);
+    assert.equal((await app.inject({ method: 'PUT', url: '/v1/data-sharing', headers, payload: { dataSharing: true } })).statusCode, 200);
+    assert.equal(store.dataSharing.size, 0);
+    assert.equal((await app.inject({ method: 'GET', url: '/v1/collector/eligibility', headers })).json().dataSharing, true);
+  } finally { await app.close(); }
+});
+
+test('repository failures fail closed on data-sharing reads and writes', async () => {
+  const app = buildServer({
+    adminSecret: 'staging-secret',
+    dataSharingRepository: {
+      async get() { throw new Error('database unavailable'); },
+      async set() { throw new Error('database unavailable'); }
+    }
+  });
+  const enrolled = await app.inject({ method: 'POST', url: '/v1/staging/devices', headers: { 'x-admin-secret': 'staging-secret' }, payload: { subjectId: randomUUID() } });
+  const headers = { authorization: `Bearer ${enrolled.json().token as string}` };
+  try {
+    const read = await app.inject({ method: 'GET', url: '/v1/collector/eligibility', headers });
+    assert.equal(read.statusCode, 503);
+    assert.equal(read.json().error, 'data_sharing_unavailable');
+    const write = await app.inject({ method: 'PUT', url: '/v1/data-sharing', headers, payload: { dataSharing: true } });
+    assert.equal(write.statusCode, 503);
+    assert.equal(write.json().error, 'data_sharing_unavailable');
+  } finally { await app.close(); }
+});
+
+test('legacy collector eligibility uses persisted consent state and does not revive revoked grants', async () => {
+  const repository: ConsentRepository = {
+    async recordDecision(input) { return { ...input, id: randomUUID(), eventSequence: 1, occurredAt: new Date().toISOString() }; },
+    async getCurrent() { return null; },
+    async getHistory() { return []; },
+    async getLatestForSubject(subjectId) {
+      return { id: randomUUID(), subjectId, purpose: 'Detect unexpected data destinations', policyVersion: '1', purposeVersion: '1', state: 'revoked' };
+    }
+  };
+  const app = buildServer({ adminSecret: 'staging-secret', consentRepository: repository });
+  const enrolled = await app.inject({ method: 'POST', url: '/v1/staging/devices', headers: { 'x-admin-secret': 'staging-secret' }, payload: { subjectId: randomUUID() } });
+  const headers = { authorization: `Bearer ${enrolled.json().token as string}` };
+  try {
+    const eligibility = await app.inject({ method: 'GET', url: '/v1/collector/eligibility', headers });
+    assert.equal(eligibility.json().consentState, 'not_granted');
+    assert.equal(eligibility.json().consentId, null);
+  } finally { await app.close(); }
+});
 test('ingestion requires active purpose consent and blocks replay',async()=>{const{app,store,token}=await setup(),permissionId=randomUUID(),headers={authorization:`Bearer ${token}`};await app.inject({method:'POST',url:'/v1/consent-events',headers,payload:{permissionId,requestId:randomUUID(),action:'grant',policyVersion:'privacy-1',purposeVersion:'network-safety-1',purpose:'Detect unexpected data destinations'}});const payload={batchId:randomUUID(),schemaVersion:'2026-08-01',observations:[{eventId:randomUUID(),occurredAt:new Date().toISOString(),sourceApp:'com.example.app',attribution:'verified',destinationHost:'api.example.com',protocol:'tls',bytesBucket:'1-10KB',classification:'expected',consentId:permissionId,consentPurpose:'Detect unexpected data destinations'}]};assert.equal((await app.inject({method:'POST',url:'/v1/metadata-batches',headers,payload})).statusCode,202);assert.equal(store.observations.length,1);assert.equal((await app.inject({method:'POST',url:'/v1/metadata-batches',headers,payload})).statusCode,409);await app.close()});
 test('revocation immediately blocks ingestion and preserves decision history',async()=>{const{app,store,token}=await setup(),permissionId=randomUUID(),headers={authorization:`Bearer ${token}`};const decision=(action:'grant'|'revoke')=>app.inject({method:'POST',url:'/v1/consent-events',headers,payload:{permissionId,requestId:randomUUID(),action,policyVersion:'privacy-1',purposeVersion:'network-safety-1',purpose:'Detect unexpected data destinations'}});assert.equal((await decision('grant')).statusCode,202);assert.equal((await decision('revoke')).statusCode,202);const payload={batchId:randomUUID(),schemaVersion:'2026-08-01',observations:[{eventId:randomUUID(),occurredAt:new Date().toISOString(),sourceApp:'com.example.app',attribution:'verified',destinationHost:'api.example.com',protocol:'tls',bytesBucket:'1-10KB',classification:'expected',consentId:permissionId,consentPurpose:'Detect unexpected data destinations'}]};assert.equal((await app.inject({method:'POST',url:'/v1/metadata-batches',headers,payload})).statusCode,403);const history=await app.inject({method:'GET',url:`/v1/consent-events/${permissionId}`,headers});assert.equal(history.statusCode,200);assert.equal(history.json().events.length,2);assert.deepEqual(history.json().events.map((event:any)=>event.action),['grant','revoke']);assert.equal(store.observations.length,0);await app.close()});
 test('payload fields fail the minimization contract',async()=>{const{app,token}=await setup();const r=await app.inject({method:'POST',url:'/v1/metadata-batches',headers:{authorization:`Bearer ${token}`},payload:{batchId:randomUUID(),schemaVersion:'2026-08-01',observations:[{payload:'secret'}]}});assert.equal(r.statusCode,400);await app.close()});
