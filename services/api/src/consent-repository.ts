@@ -37,6 +37,21 @@ export interface ConsentRepository {
   getLatestForSubject?(subjectId: string): Promise<CurrentConsent | null>;
 }
 
+export function isValidGrantExpiry(expiresAt?: string): boolean {
+  if (!expiresAt) return false;
+  const expiry = Date.parse(expiresAt);
+  const now = Date.now();
+  return expiry > now && expiry <= now + 24 * 60 * 60 * 1000;
+}
+
+function sameScope(left: Record<string, boolean> | null, right?: Record<string, boolean>): boolean {
+  if (left === null) return right === undefined;
+  if (right === undefined) return false;
+  const leftKeys = Object.keys(left).sort();
+  const rightKeys = Object.keys(right).sort();
+  return leftKeys.length === rightKeys.length && leftKeys.every((key, index) => key === rightKeys[index] && left[key] === right[key]);
+}
+
 export class PostgresConsentRepository implements ConsentRepository {
   constructor(private readonly pool: Pool) {}
 
@@ -57,8 +72,8 @@ export class PostgresConsentRepository implements ConsentRepository {
       if (duplicate.rows[0]) {
         const row = duplicate.rows[0];
         if (row.subject_id !== input.subjectId || row.permission_id !== input.permissionId || row.device_id !== (input.deviceId ?? null) || row.study_id !== (input.studyId ?? null) ||
-          JSON.stringify(row.scope ?? undefined) !== JSON.stringify(input.scope) || (row.price_cents ?? undefined) !== input.priceCents ||
-          (row.expires_at === null ? undefined : new Date(row.expires_at).toISOString()) !== input.expiresAt ||
+          !sameScope(row.scope, input.scope) || (row.price_cents ?? undefined) !== input.priceCents ||
+          (row.expires_at === null ? undefined : new Date(row.expires_at).getTime()) !== (input.expiresAt === undefined ? undefined : Date.parse(input.expiresAt)) ||
           row.action !== input.action || row.policy_version !== input.policyVersion || row.purpose_version !== input.purposeVersion || row.purpose !== input.purpose ||
           (row.expected_event_sequence === null ? undefined : Number(row.expected_event_sequence)) !== input.expectedEventSequence) {
           const error = new Error('idempotency_key_reused_with_different_request');
@@ -67,6 +82,11 @@ export class PostgresConsentRepository implements ConsentRepository {
         }
         await client.query('COMMIT');
         return { ...input, id: row.id, eventSequence: Number(row.event_sequence), occurredAt: new Date(row.occurred_at).toISOString() };
+      }
+      if (input.action === 'grant' && !isValidGrantExpiry(input.expiresAt)) {
+        const error = new Error('grant_expiry_must_be_within_24_hours');
+        (error as Error & { code?: string }).code = 'CONSENT_EXPIRY_INVALID';
+        throw error;
       }
       const prior = await client.query<{ subject_id: string }>(
         'SELECT subject_id FROM consent_events WHERE permission_id = $1 ORDER BY event_sequence DESC LIMIT 1',
@@ -132,16 +152,24 @@ export class PostgresConsentRepository implements ConsentRepository {
   async getLatestForSubject(subjectId: string): Promise<CurrentConsent | null> {
     const result = await this.pool.query<{
       permission_id: string; id: string; subject_id: string; action: ConsentAction; policy_version: string;
-      purpose_version: string; purpose: string; event_sequence: number | string; expires_at: Date | string | null;
+      purpose_version: string; purpose: string; event_sequence: number | string; occurred_at: Date | string; expires_at: Date | string | null;
     }>(
-      `SELECT DISTINCT ON (permission_id) permission_id, id, subject_id, action, policy_version,
-              purpose_version, purpose, event_sequence, expires_at
-         FROM consent_events
-        WHERE subject_id = $1
-        ORDER BY permission_id, event_sequence DESC`,
+      `WITH current_events AS (
+         SELECT DISTINCT ON (permission_id) permission_id, id, subject_id, action, policy_version,
+                purpose_version, purpose, event_sequence, occurred_at, expires_at
+           FROM consent_events
+          WHERE subject_id = $1
+          ORDER BY permission_id, event_sequence DESC
+       )
+       SELECT permission_id, id, subject_id, action, policy_version, purpose_version, purpose,
+              event_sequence, occurred_at, expires_at
+         FROM current_events
+        WHERE action = 'grant' AND expires_at > now()
+        ORDER BY occurred_at DESC
+        LIMIT 1`,
       [subjectId]
     );
-    const row = result.rows.sort((left, right) => Number(right.event_sequence) - Number(left.event_sequence))[0];
+    const row = result.rows[0];
     if (!row) return null;
     return {
       id: row.permission_id, decisionId: row.id, decisionVersion: String(row.event_sequence),

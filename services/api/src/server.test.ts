@@ -64,6 +64,83 @@ test('legacy collector eligibility uses persisted consent state and does not rev
   } finally { await app.close(); }
 });
 
+test('memory-backed GET eligibility excludes expired or expiry-less grants', async () => {
+  const { app, store, token } = await setup();
+  const subjectId = [...store.devices.values()][0]!.subjectId;
+  store.consents.set(randomUUID(), {
+    id: randomUUID(), subjectId, purpose: 'Expired grant', policyVersion: '1',
+    purposeVersion: '1', state: 'granted', expiresAt: new Date(Date.now() - 1_000).toISOString()
+  });
+  store.consents.set(randomUUID(), {
+    id: randomUUID(), subjectId, purpose: 'Expiry-less grant', policyVersion: '1',
+    purposeVersion: '1', state: 'granted'
+  });
+  try {
+    const eligibility = await app.inject({ method: 'GET', url: '/v1/collector/eligibility', headers: { authorization: 'Bearer ' + token } });
+    assert.equal(eligibility.json().consentState, 'not_granted');
+    assert.equal(eligibility.json().consentId, null);
+  } finally { await app.close(); }
+});
+
+test('expired identical consent retries replay from memory without revalidating expiry', async () => {
+  const { app, token } = await setup();
+  const originalNow = Date.now;
+  const baseTime = originalNow();
+  const input = {
+    permissionId: randomUUID(), requestId: randomUUID(), action: 'grant',
+    expiresAt: new Date(baseTime + 1_000).toISOString(), policyVersion: '1',
+    purposeVersion: '1', purpose: 'Detect unexpected data destinations'
+  };
+  const headers = { authorization: 'Bearer ' + token };
+  try {
+    const accepted = await app.inject({ method: 'POST', url: '/v1/consent-events', headers, payload: input });
+    assert.equal(accepted.statusCode, 202);
+    Date.now = () => baseTime + 2_000;
+    const replay = await app.inject({ method: 'POST', url: '/v1/consent-events', headers, payload: input });
+    assert.equal(replay.statusCode, 202);
+    assert.equal(replay.json().idempotentReplay, true);
+  } finally {
+    Date.now = originalNow;
+    await app.close();
+  }
+});
+
+test('metadata authorization rechecks sharing through the configured repository', async () => {
+  const store = memoryStore();
+  const app = buildServer({
+    store, adminSecret: 'staging-secret', collectorAuthorization: simulatedAuth(),
+    dataSharingRepository: { async get() { return true; }, async set() {} }
+  });
+  const subjectId = randomUUID();
+  const enrolled = await app.inject({
+    method: 'POST', url: '/v1/staging/devices', headers: { 'x-admin-secret': 'staging-secret' }, payload: { subjectId }
+  });
+  const headers = { authorization: 'Bearer ' + enrolled.json().token as string };
+  const permissionId = randomUUID();
+  try {
+    const grant = await app.inject({
+      method: 'POST', url: '/v1/consent-events', headers,
+      payload: {
+        permissionId, requestId: randomUUID(), action: 'grant', expiresAt: grantExpiry(),
+        policyVersion: '1', purposeVersion: '1', purpose: 'Detect unexpected data destinations'
+      }
+    });
+    assert.equal(grant.statusCode, 202);
+    assert.equal(store.dataSharing.size, 0);
+    const batch = await app.inject({
+      method: 'POST', url: '/v1/metadata-batches', headers,
+      payload: {
+        batchId: randomUUID(), schemaVersion: '2026-08-01', observations: [{
+          eventId: randomUUID(), occurredAt: new Date().toISOString(), sourceApp: null, attribution: 'unknown',
+          destinationHost: 'example.com', protocol: 'dns', bytesBucket: '0-1KB', classification: 'unknown',
+          consentId: permissionId, consentPurpose: 'Detect unexpected data destinations'
+        }]
+      }
+    });
+    assert.equal(batch.statusCode, 202);
+  } finally { await app.close(); }
+});
+
 test('POST eligibility needs independent data-sharing opt-in and returns a short-lived authorization', async () => {
   const { app, store, token } = await setup();
   const permissionId = randomUUID();
