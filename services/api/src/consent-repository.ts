@@ -28,6 +28,7 @@ export interface ConsentRepository {
   recordDecision(input: ConsentDecision): Promise<ConsentEvent>;
   getCurrent(permissionId: string): Promise<CurrentConsent | null>;
   getHistory(permissionId: string, subjectId: string): Promise<ConsentEvent[]>;
+  getLatestForSubject?(subjectId: string): Promise<CurrentConsent | null>;
 }
 
 export class PostgresConsentRepository implements ConsentRepository {
@@ -111,6 +112,27 @@ export class PostgresConsentRepository implements ConsentRepository {
       subjectId: row.subject_id, purpose: row.purpose,
       policyVersion: row.policy_version, purposeVersion: row.purpose_version,
       state: row.action === 'grant' ? 'granted' : 'revoked'
+    };
+  }
+
+  async getLatestForSubject(subjectId: string): Promise<CurrentConsent | null> {
+    const result = await this.pool.query<{
+      permission_id: string; id: string; subject_id: string; action: ConsentAction; policy_version: string;
+      purpose_version: string; purpose: string; event_sequence: number | string;
+    }>(
+      `SELECT DISTINCT ON (permission_id) permission_id, id, subject_id, action, policy_version,
+              purpose_version, purpose, event_sequence
+         FROM consent_events
+        WHERE subject_id = $1
+        ORDER BY permission_id, event_sequence DESC`,
+      [subjectId]
+    );
+    const row = result.rows.sort((left, right) => Number(right.event_sequence) - Number(left.event_sequence))[0];
+    if (!row) return null;
+    return {
+      id: row.permission_id, decisionId: row.id, decisionVersion: String(row.event_sequence),
+      subjectId: row.subject_id, purpose: row.purpose, policyVersion: row.policy_version,
+      purposeVersion: row.purpose_version, state: row.action === 'grant' ? 'granted' : 'revoked'
     };
   }
 

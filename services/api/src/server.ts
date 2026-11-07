@@ -26,6 +26,7 @@ import { KICKS_BRAND_MANIFEST } from './branding.js';
 import type { ConsentEvent, ConsentRepository } from './consent-repository.js';
 import type { DeviceRepository } from './device-repository.js';
 import type { MetadataRepository } from './metadata-repository.js';
+import type { DataSharingRepository } from './data-sharing-repository.js';
 import { CollectorAuthorizationError, CollectorAuthorizationService } from './collector-authorization.js';
 import type { CollectorAuthorizationRequest, CollectorAuthorizationResult } from './collector-authorization.js';
 
@@ -39,7 +40,7 @@ const hash=(v:string)=>createHash('sha256').update(v).digest('hex');const equal=
 const decision=z.object({permissionId:z.string().uuid(),requestId:z.string().uuid(),expectedEventSequence:z.number().int().nonnegative().optional(),action:z.enum(['grant','deny','revoke']),policyVersion:z.string().min(1).max(64),purposeVersion:z.string().min(1).max(64),purpose:z.string().min(3).max(120)}).strict();
 const batch=z.object({batchId:z.string().uuid(),schemaVersion:z.literal('2026-08-01'),observations:z.array(observation).min(1).max(250)}).strict();
 
-export function buildServer(options:{store?:Store;adminSecret?:string;intelligenceEngine?:IntelligenceEngine;walletEngine?:WalletEngine;permissionsEngine?:PermissionsEngine;consentRepository?:ConsentRepository;deviceRepository?:DeviceRepository;metadataRepository?:MetadataRepository;collectorAuthorization?:CollectorAuthorizationService;onCollectorStop?:(subjectId:string)=>void;allowSyntheticDevelopmentEvents?:boolean}={}){
+export function buildServer(options:{store?:Store;adminSecret?:string;intelligenceEngine?:IntelligenceEngine;walletEngine?:WalletEngine;permissionsEngine?:PermissionsEngine;consentRepository?:ConsentRepository;deviceRepository?:DeviceRepository;metadataRepository?:MetadataRepository;dataSharingRepository?:DataSharingRepository;collectorAuthorization?:CollectorAuthorizationService;onCollectorStop?:(subjectId:string)=>void;allowSyntheticDevelopmentEvents?:boolean}={}){
   const store=options.store??memoryStore();
   const adminSecret=options.adminSecret??process.env.KICKS_STAGING_ADMIN_SECRET??'';
   const engine = options.intelligenceEngine ?? new IntelligenceEngine();
@@ -113,7 +114,15 @@ export function buildServer(options:{store?:Store;adminSecret?:string;intelligen
     if (!device) return r.code(401).send({ error: 'unauthorized' });
     const parsed = z.object({ dataSharing: z.boolean() }).strict().safeParse(q.body);
     if (!parsed.success) return r.code(400).send({ error: 'invalid_request' });
-    store.dataSharing.set(device.subjectId, parsed.data.dataSharing);
+    if(options.dataSharingRepository) {
+      try { await options.dataSharingRepository.set(device.subjectId, parsed.data.dataSharing); }
+      catch(error) {
+        q.log.error({err:error},'data-sharing persistence failed');
+        return r.header('retry-after','1').code(503).send({error:'data_sharing_unavailable',retryable:true});
+      }
+    } else {
+      store.dataSharing.set(device.subjectId, parsed.data.dataSharing);
+    }
     return r.code(200).send({ subjectId: device.subjectId, dataSharing: parsed.data.dataSharing });
   });
 
@@ -134,12 +143,34 @@ export function buildServer(options:{store?:Store;adminSecret?:string;intelligen
       return r.code(401).send({ error: 'unauthorized' });
     }
     let latestGranted: Consent | null = null;
-    for (const consent of store.consents.values()) { if (consent.subjectId === device.subjectId && consent.state === 'granted') latestGranted = consent; }
+    if(options.consentRepository?.getLatestForSubject) {
+      try {
+        const persisted = await options.consentRepository.getLatestForSubject(device.subjectId);
+        if(persisted?.state === 'granted') latestGranted = {
+          id: persisted.id ?? '', decisionId: persisted.decisionId, decisionVersion: persisted.decisionVersion,
+          subjectId: persisted.subjectId, purpose: persisted.purpose, policyVersion: persisted.policyVersion,
+          purposeVersion: persisted.purposeVersion, state: 'granted'
+        };
+      } catch(error) {
+        q.log.error({err:error},'collector eligibility consent lookup failed');
+        return r.header('retry-after','1').code(503).send({error:'consent_verification_unavailable',retryable:true});
+      }
+    } else {
+      for (const consent of store.consents.values()) { if (consent.subjectId === device.subjectId && consent.state === 'granted') latestGranted = consent; }
+    }
+    let dataSharing = store.dataSharing.get(device.subjectId) ?? false;
+    if(options.dataSharingRepository) {
+      try { dataSharing = await options.dataSharingRepository.get(device.subjectId); }
+      catch(error) {
+        q.log.error({err:error},'collector eligibility data-sharing lookup failed');
+        return r.header('retry-after','1').code(503).send({error:'data_sharing_unavailable',retryable:true});
+      }
+    }
     return r.code(200).send({
       sessionActive: true, accountId: device.subjectId, deviceOwnerAccountId: device.subjectId,
       consentState: latestGranted ? 'granted' : 'not_granted',
       consentId: latestGranted?.id ?? null, consentPurpose: latestGranted?.purpose ?? null,
-      dataSharing: store.dataSharing.get(device.subjectId) ?? false
+      dataSharing
     });
   });
   app.post('/v1/devices/revoke',async(q,r)=>{let device: Awaited<ReturnType<typeof authenticate>>;try{device=await authenticate(q.headers.authorization, deviceContextHeader(q.headers))}catch(error){q.log.error({err:error},'device revocation authentication unavailable');return r.header('retry-after','1').code(503).send({error:'device_authentication_unavailable',retryable:true})}if(!device)return r.code(401).send({error:'unauthorized'});try{if(options.deviceRepository){const revoked=await options.deviceRepository.revokeByTokenHash(device.tokenHash);if(!revoked)return r.code(409).send({error:'device_already_revoked'});}else{const stored=store.devices.get(device.id);if(!stored||stored.revoked)return r.code(409).send({error:'device_already_revoked'});stored.revoked=true;}stopCollectors(device.subjectId,device.id);return r.code(200).send({deviceId:device.id,revoked:true,monitoringDefaultOn:false})}catch(error){q.log.error({err:error},'device revocation persistence failed');return r.header('retry-after','1').code(503).send({error:'device_revocation_unavailable',retryable:true})}});
