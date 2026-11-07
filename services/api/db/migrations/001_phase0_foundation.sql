@@ -25,8 +25,9 @@ CREATE TABLE consent_events (
   occurred_at timestamptz NOT NULL DEFAULT now(),
   expires_at timestamptz,
   expected_event_sequence integer CHECK (expected_event_sequence >= 0),
-  event_sequence bigint GENERATED ALWAYS AS IDENTITY UNIQUE,
+  event_sequence integer NOT NULL CHECK (event_sequence > 0),
   correlation_id uuid NOT NULL,
+  UNIQUE (permission_id, event_sequence),
   CHECK (scope IS NULL OR jsonb_typeof(scope) = 'object'),
   CHECK (expires_at IS NULL OR expires_at > occurred_at)
 );

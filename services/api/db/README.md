@@ -9,6 +9,10 @@ The foundation preserves compatibility with the current device, consent and
 metadata repositories. Nullable study fields are not an authorization contract:
 study scope, expiry, ownership, data-sharing persistence and the chain-independent
 eligibility oracle must be implemented and verified before enabling real grants.
+The new data-sharing repository is not connected to routes or ingestion. Its
+subject lock must also be acquired by the future protected ingestion transaction
+before the sharing state is read, so turning sharing off and committing a batch
+cannot race. Turning it off must also stop capture and purge any queued uploads.
 The existing evidence provider still requires chain proof; this work does not
 change that behavior.
 

@@ -78,10 +78,10 @@ export class PostgresConsentRepository implements ConsentRepository {
       const id = randomUUID();
       const result = await client.query<{ occurred_at: Date | string; event_sequence: number | string }>(
         `INSERT INTO consent_events
-          (id, request_id, subject_id, permission_id, action, policy_version, purpose_version, purpose, expected_event_sequence, correlation_id)
-         VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10)
+          (id, request_id, subject_id, permission_id, action, policy_version, purpose_version, purpose, expected_event_sequence, event_sequence, correlation_id)
+         VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11)
          RETURNING occurred_at, event_sequence`,
-        [id, input.requestId, input.subjectId, input.permissionId, input.action, input.policyVersion, input.purposeVersion, input.purpose, input.expectedEventSequence ?? null, id]
+        [id, input.requestId, input.subjectId, input.permissionId, input.action, input.policyVersion, input.purposeVersion, input.purpose, input.expectedEventSequence ?? null, currentSequence + 1, id]
       );
       const saved = result.rows[0];
       if (!saved) throw new Error('consent_event_insert_returned_no_row');
