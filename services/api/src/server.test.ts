@@ -141,6 +141,18 @@ test('metadata authorization rechecks sharing through the configured repository'
   } finally { await app.close(); }
 });
 
+test('consent writes apply the configured per-client rate limit', async () => {
+  const app = buildServer();
+  try {
+    let response;
+    for (let request = 0; request < 31; request++) {
+      response = await app.inject({ method: 'POST', url: '/v1/consent-events', payload: {} });
+      if (request < 30) assert.equal(response.statusCode, 401);
+    }
+    assert.equal(response?.statusCode, 429);
+  } finally { await app.close(); }
+});
+
 test('POST eligibility needs independent data-sharing opt-in and returns a short-lived authorization', async () => {
   const { app, store, token } = await setup();
   const permissionId = randomUUID();
