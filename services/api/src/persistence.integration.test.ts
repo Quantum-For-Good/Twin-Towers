@@ -58,7 +58,10 @@ test('disposable PostgreSQL retains consent, retries, revocation and batch repla
     const secondStream = { ...decision, permissionId: randomUUID(), requestId: randomUUID() };
     const secondGrant = await repository.recordDecision(secondStream);
     assert.equal(secondGrant.eventSequence, 1);
-    const secondRevoke = await repository.recordDecision({ ...secondStream, requestId: randomUUID(), expectedEventSequence: secondGrant.eventSequence, action: 'revoke' });
+    const secondRevoke = await repository.recordDecision({
+      ...secondStream, requestId: randomUUID(), expectedEventSequence: secondGrant.eventSequence,
+      action: 'revoke', expiresAt: new Date(Date.now() - 60_000).toISOString()
+    });
     assert.equal(secondRevoke.eventSequence, 2);
     const concurrentStream = { ...decision, permissionId: randomUUID(), requestId: randomUUID() };
     const concurrentReplays = await Promise.all([

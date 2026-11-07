@@ -37,6 +37,65 @@ test('consent repository writes the next permission-specific sequence under its 
   } finally { await pool.end(); }
 });
 
+test('consent retries compare normalized JSON scopes and expiry timestamps before enforcing current expiry', async () => {
+  const pool = new pg.Pool();
+  const requestId = randomUUID();
+  const subjectId = randomUUID();
+  const permissionId = randomUUID();
+  const calls: string[] = [];
+  const client = {
+    async query(sql: string) {
+      calls.push(sql);
+      if (sql.includes('WHERE request_id')) return { rows: [{
+        id: randomUUID(), subject_id: subjectId, permission_id: permissionId, device_id: null, study_id: null,
+        purpose: 'Detect unexpected data destinations', scope: { alpha: true, beta: false }, price_cents: null,
+        expires_at: new Date('2026-01-01T12:34:52.000Z'), action: 'grant', policy_version: '1',
+        purpose_version: '1', expected_event_sequence: null, event_sequence: 1,
+        occurred_at: new Date('2026-01-01T12:00:00.000Z')
+      }] };
+      return { rows: [] };
+    },
+    release() {}
+  };
+  Object.defineProperty(pool, 'connect', { value: async () => client });
+  const repository = new PostgresConsentRepository(pool);
+  const input = {
+    requestId, subjectId, permissionId, action: 'grant' as const,
+    policyVersion: '1', purposeVersion: '1', purpose: 'Detect unexpected data destinations',
+    scope: { beta: false, alpha: true }, expiresAt: '2026-01-01T12:34:52Z'
+  };
+  try {
+    const replay = await repository.recordDecision(input);
+    assert.equal(replay.eventSequence, 1);
+    await assert.rejects(repository.recordDecision({ ...input, scope: undefined }), (error: Error & { code?: string }) => error.code === 'IDEMPOTENCY_CONFLICT');
+    assert.equal(calls.filter(sql => sql.includes('WHERE request_id')).length, 2);
+  } finally { await pool.end(); }
+});
+
+test('latest subject consent selects the latest unexpired current grant across permissions', async () => {
+  const pool = new pg.Pool();
+  const permissionId = randomUUID();
+  const decisionId = randomUUID();
+  const subjectId = randomUUID();
+  let query = '';
+  Object.defineProperty(pool, 'query', { value: async (sql: string) => {
+    query = sql;
+    return { rows: [{
+      permission_id: permissionId, id: decisionId, subject_id: subjectId, action: 'grant',
+      policy_version: '1', purpose_version: '1', purpose: 'Detect unexpected data destinations',
+      event_sequence: 1, occurred_at: new Date(), expires_at: new Date(Date.now() + 60_000)
+    }] };
+  } });
+  try {
+    const current = await new PostgresConsentRepository(pool).getLatestForSubject(subjectId);
+    assert.equal(current?.decisionId, decisionId);
+    assert.match(query, /DISTINCT ON \(permission_id\)/);
+    assert.match(query, /ORDER BY permission_id, event_sequence DESC/);
+    assert.match(query, /WHERE action = 'grant' AND expires_at > now\(\)/);
+    assert.match(query, /ORDER BY occurred_at DESC/);
+  } finally { await pool.end(); }
+});
+
 test('data-sharing writes use the subject lock and roll back on failure', async () => {
   const pool = new pg.Pool();
   const calls: { sql: string; values: unknown[] }[] = [];
@@ -90,5 +149,6 @@ test('metadata ingestion rejects expired grants before storing a batch', async (
       (error: Error & { code?: string }) => error.code === 'ACTIVE_PURPOSE_CONSENT_REQUIRED'
     );
     assert.ok(!calls.some(sql => sql.includes('INSERT INTO metadata_batches')));
+    assert.ok(calls.some(sql => sql.includes('FOR NO KEY UPDATE')));
   } finally { await pool.end(); }
 });

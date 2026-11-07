@@ -31,7 +31,7 @@ export class PostgresMetadataRepository implements MetadataRepository {
     try {
       await client.query('BEGIN');
       const activeDevice = await client.query<{ id: string }>(
-        'SELECT id FROM devices WHERE id = $1 AND subject_id = $2 AND revoked_at IS NULL FOR UPDATE',
+        'SELECT id FROM devices WHERE id = $1 AND subject_id = $2 AND revoked_at IS NULL FOR NO KEY UPDATE',
         [device.id, device.subjectId]
       );
       if (!activeDevice.rows[0]) {
