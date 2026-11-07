@@ -1,7 +1,8 @@
 import assert from 'node:assert/strict';
-import { randomBytes, randomUUID } from 'node:crypto';
+import { createHash, randomBytes, randomUUID } from 'node:crypto';
 import test from 'node:test';
 import pg from 'pg';
+import { buildServer } from './server.js';
 import { PostgresConsentRepository } from './consent-repository.js';
 import { PostgresDeviceRepository } from './device-repository.js';
 import { PostgresMetadataRepository, type MetadataBatch } from './metadata-repository.js';
@@ -36,11 +37,13 @@ test('disposable PostgreSQL retains consent, retries, revocation and batch repla
     pool = newPool();
     await runMigrations(pool);
     await runMigrations(pool);
-    const device = { id: randomUUID(), subjectId: randomUUID(), tokenHash: randomBytes(32).toString('hex'), revoked: false };
+    const bearer = randomBytes(32).toString('base64url');
+    const device = { id: randomUUID(), subjectId: randomUUID(), tokenHash: createHash('sha256').update(bearer).digest('hex'), revoked: false };
     const decision = {
       permissionId: randomUUID(), requestId: randomUUID(), expectedEventSequence: 0,
-      subjectId: device.subjectId, action: 'grant' as const, policyVersion: '1',
-      purposeVersion: '1', purpose: 'Detect unexpected data destinations'
+      subjectId: device.subjectId, deviceId: device.id, action: 'grant' as const, policyVersion: '1',
+      purposeVersion: '1', purpose: 'Detect unexpected data destinations',
+      expiresAt: new Date(Date.now() + 60_000).toISOString()
     };
     await new PostgresDeviceRepository(pool).create(device, 'staging');
     const sharing = new PostgresDataSharingRepository(pool);
@@ -96,6 +99,23 @@ test('disposable PostgreSQL retains consent, retries, revocation and batch repla
     assert.equal((await new PostgresConsentRepository(pool).getCurrent(decision.permissionId))?.state, 'revoked');
     assert.equal((await new PostgresConsentRepository(pool).getHistory(decision.permissionId, device.subjectId)).length, 2);
     assert.equal(await new PostgresDataSharingRepository(pool).get(device.subjectId), false);
+    const restartedApp = buildServer({
+      deviceRepository: new PostgresDeviceRepository(pool),
+      consentRepository: new PostgresConsentRepository(pool),
+      metadataRepository: new PostgresMetadataRepository(pool),
+      dataSharingRepository: new PostgresDataSharingRepository(pool),
+      phase0PostgresAuthorization: true
+    });
+    try {
+      const history = await restartedApp.inject({
+        method: 'GET', url: `/v1/consent-events/${decision.permissionId}`,
+        headers: { authorization: `Bearer ${bearer}` }
+      });
+      assert.equal(history.statusCode, 200);
+      assert.equal(history.json().events.length, 2);
+      assert.equal(history.json().events[0].deviceId, device.id);
+      assert.equal(history.json().events[0].expiresAt, decision.expiresAt);
+    } finally { await restartedApp.close(); }
     assert.equal(await new PostgresDeviceRepository(pool).revokeByTokenHash(device.tokenHash), true);
     assert.equal(await new PostgresDeviceRepository(pool).findActiveByTokenHash(device.tokenHash), null);
   } finally {

@@ -29,7 +29,8 @@ CREATE TABLE consent_events (
   correlation_id uuid NOT NULL,
   UNIQUE (permission_id, event_sequence),
   CHECK (scope IS NULL OR jsonb_typeof(scope) = 'object'),
-  CHECK (expires_at IS NULL OR expires_at > occurred_at)
+  CHECK (expires_at IS NULL OR expires_at > occurred_at),
+  CHECK (action <> 'grant' OR expires_at IS NOT NULL)
 );
 CREATE INDEX consent_events_permission_sequence_idx ON consent_events (permission_id, event_sequence DESC);
 
