@@ -1,18 +1,20 @@
 # Phase 0 persistence foundation (incomplete)
 
-The migration runner and `001_phase0_foundation.sql` are a starting point for a
-new empty database. They are not wired into API startup and do not replace the
-in-memory stores. Do not apply this baseline to an existing database; it has no
-upgrade or data-migration path. The older `schema.sql` is not a migration.
+The API uses the migration runner and PostgreSQL repositories at startup when
+`KICKS_DATABASE_URL` is configured. Production refuses to start without that
+dedicated setting. Without it, local development uses in-memory stores.
+`001_phase0_foundation.sql` is a starting point for a new empty database, not an
+upgrade or data-migration path; do not apply it to an existing database. The
+older `schema.sql` is not a migration.
 
 The foundation preserves compatibility with the current device, consent and
 metadata repositories. Nullable study fields are not an authorization contract:
 study scope, expiry, ownership, data-sharing persistence and the chain-independent
 eligibility oracle must be implemented and verified before enabling real grants.
-The new data-sharing repository is not connected to routes or ingestion. Its
-subject lock must also be acquired by the future protected ingestion transaction
-before the sharing state is read, so turning sharing off and committing a batch
-cannot race. Turning it off must also stop capture and purge any queued uploads.
+Data-sharing routes use the PostgreSQL repository, and metadata ingestion checks
+the sharing state under the same subject lock used by updates. Turning sharing
+off stops local collectors through the configured stop hook; native queued-data
+purge and 15-second authority polling still need end-to-end verification.
 The existing evidence provider still requires chain proof; this work does not
 change that behavior.
 

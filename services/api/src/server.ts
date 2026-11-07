@@ -33,14 +33,14 @@ import type { CollectorAuthorizationRequest, CollectorAuthorizationResult } from
 export * from './collector-authorization.js';
 export type CollectorAuditEntry={at:string;operation:string;deviceId:string;state:string;reason:string;observations:number};
 
-type Device={id:string;subjectId:string;tokenHash:string;revoked:boolean};type Consent={id:string;decisionId?:string;decisionVersion?:string;subjectId:string;purpose:string;policyVersion:string;purposeVersion:string;state:'granted'|'revoked'};
+type Device={id:string;subjectId:string;tokenHash:string;revoked:boolean};type Consent={id:string;decisionId?:string;decisionVersion?:string;subjectId:string;purpose:string;policyVersion:string;purposeVersion:string;state:'granted'|'revoked';expiresAt?:string};
 const observation=z.object({eventId:z.string().uuid(),occurredAt:z.string().datetime(),sourceApp:z.string().min(1).max(180).nullable(),attribution:z.enum(['verified','best_effort','unknown']),destinationHost:z.string().regex(/^(?=.{1,253}$)(?!-)[a-z0-9.-]+(?<!-)$/),protocol:z.enum(['dns','tcp','udp','tls','quic','other']),bytesBucket:z.enum(['0-1KB','1-10KB','10-100KB','100KB-1MB','1MB+']),classification:z.enum(['expected','review','unpermissioned','unknown']),consentId:z.string().uuid(),consentPurpose:z.string().min(3).max(120)}).strict();
 type Observation=z.infer<typeof observation>;export interface Store{devices:Map<string,Device>;consents:Map<string,Consent>;consentHistory:ConsentEvent[];consentRequests:Map<string,ConsentEvent>;batches:Set<string>;observations:Observation[];collectorAudit:CollectorAuditEntry[];dataSharing:Map<string,boolean>};export const memoryStore=():Store=>({devices:new Map(),consents:new Map(),consentHistory:[],consentRequests:new Map(),batches:new Set(),observations:[],collectorAudit:[],dataSharing:new Map()});
 const hash=(v:string)=>createHash('sha256').update(v).digest('hex');const equal=(a:string,b:string)=>{const x=Buffer.from(a),y=Buffer.from(b);return x.length===y.length&&timingSafeEqual(x,y)};
-const decision=z.object({permissionId:z.string().uuid(),requestId:z.string().uuid(),expectedEventSequence:z.number().int().nonnegative().optional(),action:z.enum(['grant','deny','revoke']),policyVersion:z.string().min(1).max(64),purposeVersion:z.string().min(1).max(64),purpose:z.string().min(3).max(120)}).strict();
+const decision=z.object({permissionId:z.string().uuid(),requestId:z.string().uuid(),expectedEventSequence:z.number().int().nonnegative().optional(),studyId:z.string().min(1).max(120).optional(),scope:z.record(z.boolean()).optional(),priceCents:z.number().int().nonnegative().max(100_000).optional(),expiresAt:z.string().datetime().optional(),action:z.enum(['grant','deny','revoke']),policyVersion:z.string().min(1).max(64),purposeVersion:z.string().min(1).max(64),purpose:z.string().min(3).max(120)}).strict().superRefine((value,context)=>{if(value.action==='grant'){if(!value.expiresAt){context.addIssue({code:'custom',path:['expiresAt'],message:'grant_expiry_required'});return}const expiry=Date.parse(value.expiresAt),now=Date.now();if(expiry<=now||expiry>now+24*60*60*1000)context.addIssue({code:'custom',path:['expiresAt'],message:'grant_expiry_must_be_within_24_hours'})}});
 const batch=z.object({batchId:z.string().uuid(),schemaVersion:z.literal('2026-08-01'),observations:z.array(observation).min(1).max(250)}).strict();
 
-export function buildServer(options:{store?:Store;adminSecret?:string;intelligenceEngine?:IntelligenceEngine;walletEngine?:WalletEngine;permissionsEngine?:PermissionsEngine;consentRepository?:ConsentRepository;deviceRepository?:DeviceRepository;metadataRepository?:MetadataRepository;dataSharingRepository?:DataSharingRepository;collectorAuthorization?:CollectorAuthorizationService;onCollectorStop?:(subjectId:string)=>void;allowSyntheticDevelopmentEvents?:boolean}={}){
+export function buildServer(options:{store?:Store;adminSecret?:string;intelligenceEngine?:IntelligenceEngine;walletEngine?:WalletEngine;permissionsEngine?:PermissionsEngine;consentRepository?:ConsentRepository;deviceRepository?:DeviceRepository;metadataRepository?:MetadataRepository;dataSharingRepository?:DataSharingRepository;phase0PostgresAuthorization?:boolean;collectorAuthorization?:CollectorAuthorizationService;onCollectorStop?:(subjectId:string)=>void;allowSyntheticDevelopmentEvents?:boolean}={}){
   const store=options.store??memoryStore();
   const adminSecret=options.adminSecret??process.env.KICKS_STAGING_ADMIN_SECRET??'';
   const engine = options.intelligenceEngine ?? new IntelligenceEngine();
@@ -55,7 +55,9 @@ export function buildServer(options:{store?:Store;adminSecret?:string;intelligen
   const stopCollectors=(subjectId:string,deviceId?:string)=>{collectorAuth.revokeAllForSubject(subjectId);if(deviceId)collectorAuth.revokeAllForDevice(deviceId);try{options.onCollectorStop?.(subjectId)}catch{}};
   app.register(cors,{origin:true});
   app.addHook('onSend',async(_q,r,p)=>{r.header('cache-control','no-store').header('x-content-type-options','nosniff');return p});
-  app.get('/health',async()=>({status:'ok',service:'kicks-api',mode:'staging',collector:'metadata-only'}));
+  const durablePhase0 = !!options.deviceRepository && !!options.consentRepository &&
+    !!options.metadataRepository && !!options.dataSharingRepository && options.phase0PostgresAuthorization === true;
+  app.get('/health',async()=>({status:'ok',service:'kicks-api',mode:'staging',collector:'metadata-only',durability:durablePhase0?'postgres':'memory'}));
 
   const deviceContextHeader=(headers:{[key:string]:string|string[]|undefined})=>{const value=headers['x-kicks-device'];return value===undefined?undefined:Array.isArray(value)?(value.length===1?value[0]:''):value};
   const authenticate=async(authorization?:string,suppliedDeviceId?:string)=>{const[scheme,token]=authorization?.split(' ')??[];if(scheme!=='Bearer'||!token)return null;const tokenHash=hash(token);const device=options.deviceRepository?await options.deviceRepository.findActiveByTokenHash(tokenHash):[...store.devices.values()].find(d=>!d.revoked&&equal(d.tokenHash,tokenHash))??null;return device&&(suppliedDeviceId===undefined||suppliedDeviceId===device.id)?device:null};
@@ -123,6 +125,7 @@ export function buildServer(options:{store?:Store;adminSecret?:string;intelligen
     } else {
       store.dataSharing.set(device.subjectId, parsed.data.dataSharing);
     }
+    if (!parsed.data.dataSharing) stopCollectors(device.subjectId, device.id);
     return r.code(200).send({ subjectId: device.subjectId, dataSharing: parsed.data.dataSharing });
   });
 
@@ -149,7 +152,7 @@ export function buildServer(options:{store?:Store;adminSecret?:string;intelligen
         if(persisted?.state === 'granted') latestGranted = {
           id: persisted.id ?? '', decisionId: persisted.decisionId, decisionVersion: persisted.decisionVersion,
           subjectId: persisted.subjectId, purpose: persisted.purpose, policyVersion: persisted.policyVersion,
-          purposeVersion: persisted.purposeVersion, state: 'granted'
+          purposeVersion: persisted.purposeVersion, state: 'granted', expiresAt: persisted.expiresAt
         };
       } catch(error) {
         q.log.error({err:error},'collector eligibility consent lookup failed');
@@ -174,15 +177,114 @@ export function buildServer(options:{store?:Store;adminSecret?:string;intelligen
     });
   });
   app.post('/v1/devices/revoke',async(q,r)=>{let device: Awaited<ReturnType<typeof authenticate>>;try{device=await authenticate(q.headers.authorization, deviceContextHeader(q.headers))}catch(error){q.log.error({err:error},'device revocation authentication unavailable');return r.header('retry-after','1').code(503).send({error:'device_authentication_unavailable',retryable:true})}if(!device)return r.code(401).send({error:'unauthorized'});try{if(options.deviceRepository){const revoked=await options.deviceRepository.revokeByTokenHash(device.tokenHash);if(!revoked)return r.code(409).send({error:'device_already_revoked'});}else{const stored=store.devices.get(device.id);if(!stored||stored.revoked)return r.code(409).send({error:'device_already_revoked'});stored.revoked=true;}stopCollectors(device.subjectId,device.id);return r.code(200).send({deviceId:device.id,revoked:true,monitoringDefaultOn:false})}catch(error){q.log.error({err:error},'device revocation persistence failed');return r.header('retry-after','1').code(503).send({error:'device_revocation_unavailable',retryable:true})}});
-  app.post('/v1/consent-events',async(q,r)=>{let device: Awaited<ReturnType<typeof authenticate>>;try{device=await authenticate(q.headers.authorization, deviceContextHeader(q.headers))}catch(error){q.log.error({err:error},'device authentication unavailable');return r.header('retry-after','1').code(503).send({error:'device_authentication_unavailable',retryable:true})}if(!device)return r.code(401).send({error:'unauthorized'});const parsed=decision.safeParse(q.body);if(!parsed.success)return r.code(400).send({error:'invalid_request',issues:parsed.error.issues});const input={...parsed.data,subjectId:device.subjectId};try{const prior=store.consents.get(input.permissionId);if(prior&&prior.subjectId!==device.subjectId)return r.code(409).send({error:'permission_owner_mismatch'});let event:ConsentEvent;if(options.consentRepository){event=await options.consentRepository.recordDecision(input);stopCollectors(device.subjectId)}else{const duplicate=store.consentRequests.get(input.requestId);if(duplicate){if(duplicate.subjectId!==input.subjectId||duplicate.permissionId!==input.permissionId||duplicate.action!==input.action||duplicate.policyVersion!==input.policyVersion||duplicate.purposeVersion!==input.purposeVersion||duplicate.purpose!==input.purpose)return r.code(409).send({error:'idempotency_key_reused_with_different_request'});return r.code(202).send({...duplicate,status:'accepted',idempotentReplay:true})}const currentSequence=store.consentHistory.filter(e=>e.permissionId===input.permissionId).length;if(input.expectedEventSequence!==undefined&&input.expectedEventSequence!==currentSequence)return r.code(409).send({error:'stale_consent_decision'});event={...input,id:randomUUID(),eventSequence:currentSequence+1,occurredAt:new Date().toISOString()};store.consentHistory.push(event);store.consentRequests.set(input.requestId,event)}const consent:Consent={id:input.permissionId,decisionId:event.id,decisionVersion:event.eventSequence===undefined?undefined:String(event.eventSequence),subjectId:device.subjectId,purpose:input.purpose,policyVersion:input.policyVersion,purposeVersion:input.purposeVersion,state:input.action==='grant'?'granted':'revoked'};store.consents.set(consent.id,consent);stopCollectors(device.subjectId);return r.code(202).send({...event,status:'accepted'})}catch(error){if((error as {code?:string})?.code==='CONSENT_OWNER_MISMATCH')return r.code(409).send({error:'permission_owner_mismatch'});if((error as {code?:string})?.code==='CONSENT_STALE_DECISION')return r.code(409).send({error:'stale_consent_decision'});if((error as {code?:string})?.code==='IDEMPOTENCY_CONFLICT')return r.code(409).send({error:'idempotency_key_reused_with_different_request'});q.log.error({err:error},'consent persistence failed');return r.header('retry-after','1').code(503).send({error:'consent_persistence_unavailable',retryable:true})}});
-  app.post('/v1/collector/eligibility',async(q,r)=>{let device: Awaited<ReturnType<typeof authenticate>>;try{device=await authenticate(q.headers.authorization, deviceContextHeader(q.headers))}catch(error){q.log.error({err:error},'collector eligibility device authentication unavailable');return r.header('retry-after','1').code(503).send({eligible:false,error:'device_authentication_unavailable',retryable:true})}if(!device)return r.code(401).send({eligible:false,error:'unauthorized'});const parsed=z.object({permissionId:z.string().uuid(),purpose:z.string().min(3).max(120),activationRequested:z.literal(true)}).strict().safeParse(q.body);if(!parsed.success)return r.code(400).send({eligible:false,error:'invalid_request'});try{let current:Consent|null=store.consents.get(parsed.data.permissionId)??null;if(options.consentRepository){const persisted=await options.consentRepository.getCurrent(parsed.data.permissionId);current=persisted?{id:parsed.data.permissionId,decisionId:persisted.decisionId,decisionVersion:persisted.decisionVersion,subjectId:persisted.subjectId,purpose:persisted.purpose,policyVersion:persisted.policyVersion,purposeVersion:persisted.purposeVersion,state:persisted.state}:null}if(!current||current.subjectId!==device.subjectId||current.state!=='granted'||current.purpose!==parsed.data.purpose)return r.code(403).send({eligible:false,error:'active_purpose_consent_required'});// Eligibility is informational only. Capture authorization is rechecked by the protected ingestion transaction below.
-const response:{eligible:true;state:'ELIGIBLE';deviceId:string;permissionId:string;purpose:string;activationRequested:true;monitoringDefaultOn:false;decisionId?:string;decisionVersion?:string;policyVersion?:string;purposeVersion?:string}={eligible:true,state:'ELIGIBLE',deviceId:device.id,permissionId:current.id,purpose:current.purpose,activationRequested:parsed.data.activationRequested,monitoringDefaultOn:false};if(current.decisionId)response.decisionId=current.decisionId;if(current.decisionVersion)response.decisionVersion=current.decisionVersion;if(current.policyVersion)response.policyVersion=current.policyVersion;if(current.purposeVersion)response.purposeVersion=current.purposeVersion;return r.code(200).send(response)}catch(error){q.log.error({err:error},'collector eligibility consent check failed');return r.header('retry-after','1').code(503).send({eligible:false,error:'consent_verification_unavailable',retryable:true})}});
+  app.post('/v1/consent-events', async (q, r) => {
+    let device: Awaited<ReturnType<typeof authenticate>>;
+    try { device = await authenticate(q.headers.authorization, deviceContextHeader(q.headers)); }
+    catch (error) {
+      q.log.error({ err: error }, 'device authentication unavailable');
+      return r.header('retry-after', '1').code(503).send({ error: 'device_authentication_unavailable', retryable: true });
+    }
+    if (!device) return r.code(401).send({ error: 'unauthorized' });
+    const parsed = decision.safeParse(q.body);
+    if (!parsed.success) return r.code(400).send({ error: 'invalid_request', issues: parsed.error.issues });
+    const input = { ...parsed.data, subjectId: device.subjectId, deviceId: device.id };
+    try {
+      const prior = store.consents.get(input.permissionId);
+      if (prior && prior.subjectId !== device.subjectId) return r.code(409).send({ error: 'permission_owner_mismatch' });
+      let event: ConsentEvent;
+      if (options.consentRepository) {
+        event = await options.consentRepository.recordDecision(input);
+      } else {
+        const duplicate = store.consentRequests.get(input.requestId);
+        if (duplicate) {
+          if (duplicate.subjectId !== input.subjectId || duplicate.deviceId !== input.deviceId ||
+            duplicate.permissionId !== input.permissionId || duplicate.action !== input.action ||
+            duplicate.policyVersion !== input.policyVersion || duplicate.purposeVersion !== input.purposeVersion ||
+            duplicate.purpose !== input.purpose || duplicate.studyId !== input.studyId ||
+            JSON.stringify(duplicate.scope) !== JSON.stringify(input.scope) || duplicate.priceCents !== input.priceCents ||
+            duplicate.expiresAt !== input.expiresAt || duplicate.expectedEventSequence !== input.expectedEventSequence) {
+            return r.code(409).send({ error: 'idempotency_key_reused_with_different_request' });
+          }
+          return r.code(202).send({ ...duplicate, status: 'accepted', idempotentReplay: true });
+        }
+        const currentSequence = store.consentHistory.filter(event => event.permissionId === input.permissionId).length;
+        if (input.expectedEventSequence !== undefined && input.expectedEventSequence !== currentSequence) return r.code(409).send({ error: 'stale_consent_decision' });
+        event = { ...input, id: randomUUID(), eventSequence: currentSequence + 1, occurredAt: new Date().toISOString() };
+        store.consentHistory.push(event);
+        store.consentRequests.set(input.requestId, event);
+      }
+      const consent: Consent = {
+        id: input.permissionId, decisionId: event.id, decisionVersion: event.eventSequence === undefined ? undefined : String(event.eventSequence),
+        subjectId: device.subjectId, purpose: input.purpose, policyVersion: input.policyVersion, purposeVersion: input.purposeVersion,
+        state: input.action === 'grant' && !!event.expiresAt && Date.parse(event.expiresAt) > Date.now() ? 'granted' : 'revoked',
+        expiresAt: event.expiresAt
+      };
+      const cached = store.consents.get(consent.id);
+      if (!cached || cached.decisionVersion === undefined || consent.decisionVersion === undefined ||
+        Number(consent.decisionVersion) > Number(cached.decisionVersion)) store.consents.set(consent.id, consent);
+      stopCollectors(device.subjectId);
+      return r.code(202).send({ ...event, status: 'accepted' });
+    } catch (error) {
+      if ((error as { code?: string })?.code === 'CONSENT_OWNER_MISMATCH') return r.code(409).send({ error: 'permission_owner_mismatch' });
+      if ((error as { code?: string })?.code === 'CONSENT_STALE_DECISION') return r.code(409).send({ error: 'stale_consent_decision' });
+      if ((error as { code?: string })?.code === 'IDEMPOTENCY_CONFLICT') return r.code(409).send({ error: 'idempotency_key_reused_with_different_request' });
+      q.log.error({ err: error }, 'consent persistence failed');
+      return r.header('retry-after', '1').code(503).send({ error: 'consent_persistence_unavailable', retryable: true });
+    }
+  });
+  app.post('/v1/collector/eligibility', async (q, r) => {
+    let device: Awaited<ReturnType<typeof authenticate>>;
+    try { device = await authenticate(q.headers.authorization, deviceContextHeader(q.headers)); }
+    catch (error) {
+      q.log.error({ err: error }, 'collector eligibility device authentication unavailable');
+      return r.header('retry-after', '1').code(503).send({ eligible: false, error: 'device_authentication_unavailable', retryable: true });
+    }
+    if (!device) return r.code(401).send({ eligible: false, error: 'unauthorized' });
+    const parsed = z.object({
+      permissionId: z.string().uuid(), purpose: z.string().min(3).max(120), activationRequested: z.literal(true)
+    }).strict().safeParse(q.body);
+    if (!parsed.success) return r.code(400).send({ eligible: false, error: 'invalid_request' });
+    try {
+      let current: Consent | null = store.consents.get(parsed.data.permissionId) ?? null;
+      if (options.consentRepository) {
+        const persisted = await options.consentRepository.getCurrent(parsed.data.permissionId);
+        current = persisted ? {
+          id: parsed.data.permissionId, decisionId: persisted.decisionId, decisionVersion: persisted.decisionVersion,
+          subjectId: persisted.subjectId, purpose: persisted.purpose, policyVersion: persisted.policyVersion,
+          purposeVersion: persisted.purposeVersion, state: persisted.state, expiresAt: persisted.expiresAt
+        } : null;
+      }
+      let reason: string | undefined;
+      if (!current || current.subjectId !== device.subjectId || current.purpose !== parsed.data.purpose || current.state !== 'granted') {
+        reason = 'active_purpose_consent_required';
+      } else if (!current.expiresAt || Date.parse(current.expiresAt) <= Date.now()) {
+        reason = 'consent_expired';
+      } else if (!current.decisionId) {
+        reason = 'authorization_record_missing';
+      }
+      let dataSharing = store.dataSharing.get(device.subjectId) ?? false;
+      if (options.dataSharingRepository) dataSharing = await options.dataSharingRepository.get(device.subjectId);
+      if (!reason && !dataSharing) reason = 'data_sharing_disabled';
+      if (reason) return r.code(200).send({ eligible: false, state: 'NOT_ELIGIBLE', reason, deviceId: device.id });
+      const expiresAt = new Date(Math.min(Date.now() + 15_000, Date.parse(current!.expiresAt!))).toISOString();
+      return r.code(200).send({
+        eligible: true, state: 'ELIGIBLE', authorizationId: current!.decisionId!, expiresAt,
+        deviceId: device.id, permissionId: current!.id, purpose: current!.purpose,
+        activationRequested: parsed.data.activationRequested, monitoringDefaultOn: false,
+        decisionId: current!.decisionId, decisionVersion: current!.decisionVersion,
+        policyVersion: current!.policyVersion, purposeVersion: current!.purposeVersion
+      });
+    } catch (error) {
+      q.log.error({ err: error }, 'collector eligibility consent check failed');
+      return r.header('retry-after', '1').code(503).send({ eligible: false, error: 'consent_verification_unavailable', retryable: true });
+    }
+  });
   app.get('/v1/consent-events/:permissionId',async(q,r)=>{let device: Awaited<ReturnType<typeof authenticate>>;try{device=await authenticate(q.headers.authorization, deviceContextHeader(q.headers))}catch(error){q.log.error({err:error},'device authentication unavailable');return r.header('retry-after','1').code(503).send({error:'device_authentication_unavailable',retryable:true})}if(!device)return r.code(401).send({error:'unauthorized'});const params=z.object({permissionId:z.string().uuid()}).safeParse(q.params);if(!params.success)return r.code(400).send({error:'invalid_request'});try{if(options.consentRepository){const events=await options.consentRepository.getHistory(params.data.permissionId,device.subjectId);return r.code(200).send({permissionId:params.data.permissionId,events})}const events=store.consentHistory.filter(e=>e.permissionId===params.data.permissionId&&e.subjectId===device.subjectId);return r.code(200).send({permissionId:params.data.permissionId,events})}catch(error){q.log.error({err:error},'consent history read failed');return r.header('retry-after','1').code(503).send({error:'consent_persistence_unavailable',retryable:true})}});
   app.post('/v1/metadata-batches',async(q,r)=>{let device: Awaited<ReturnType<typeof authenticate>>;try{device=await authenticate(q.headers.authorization, deviceContextHeader(q.headers))}catch(error){q.log.error({err:error},'device authentication unavailable');return r.header('retry-after','1').code(503).send({error:'device_authentication_unavailable',retryable:true})}if(!device)return r.code(401).send({error:'unauthorized'});const parsed=batch.safeParse(q.body);if(!parsed.success)return r.code(400).send({error:'invalid_or_non_minimized_metadata',issues:parsed.error.issues});const authRequests=[...new Map(parsed.data.observations.map(item=>[`${item.consentId}|${item.consentPurpose}`,{authenticatedSubject:device.subjectId,deviceId:device.id,consentScope:item.consentId,purpose:item.consentPurpose,requestedOperation:'metadata.ingest' as const}])).values()];const count=parsed.data.observations.length;
   const authorizeAll=async(transaction?:unknown)=>{for(const request of authRequests)await collectorAuth.assertAuthorized(request,transaction)};
   const handleDenied=(error:unknown)=>{if(error instanceof CollectorAuthorizationError){auditDenied('metadata.ingest',device.id,error.result,count,q.log);return sendDenied(r,error.result)}return null};
-  if(options.metadataRepository){try{await authorizeAll()}catch(error){const denied=handleDenied(error);if(denied)return denied;throw error}try{const result=await options.metadataRepository.ingestBatch(device,parsed.data,authorizeAll);return r.code(202).send(result)}catch(error){const denied=handleDenied(error);if(denied)return denied;const code=(error as {code?:string})?.code;if(code==='BATCH_REPLAY')return r.code(409).send({error:'replay_detected'});if(code==='ACTIVE_PURPOSE_CONSENT_REQUIRED')return r.code(403).send({error:'active_purpose_consent_required'});if(code==='DEVICE_NOT_ACTIVE')return r.code(401).send({error:'device_not_active'});q.log.error({err:error},'metadata persistence failed');return r.header('retry-after','1').code(503).send({error:'metadata_persistence_unavailable',retryable:true})}}if(store.batches.has(parsed.data.batchId))return r.code(409).send({error:'replay_detected'});const consentAllows=async(item:Observation)=>{let consent:Consent|null=store.consents.get(item.consentId)??null;if(options.consentRepository){const current=await options.consentRepository.getCurrent(item.consentId);consent=current?{id:item.consentId,decisionId:current.decisionId,decisionVersion:current.decisionVersion,subjectId:current.subjectId,purpose:current.purpose,policyVersion:current.policyVersion,purposeVersion:current.purposeVersion,state:current.state}:null}return !!consent&&consent.subjectId===device.subjectId&&consent.state==='granted'&&consent.purpose===item.consentPurpose};for(const item of parsed.data.observations){let allowed:boolean;try{allowed=await consentAllows(item)}catch(error){q.log.error({err:error},'consent verification failed');return r.header('retry-after','1').code(503).send({error:'consent_verification_unavailable',retryable:true})}if(!allowed)return r.code(403).send({error:'active_purpose_consent_required',eventId:item.eventId})}
-  try{await authRequests.reduceRight<()=>Promise<void>>((next,request)=>()=>collectorAuth.runAuthorized(request,()=>next()),async()=>{if(store.batches.has(parsed.data.batchId))throw Object.assign(new Error('replay'),{code:'BATCH_REPLAY'});for(const item of parsed.data.observations){const consent=store.consents.get(item.consentId);if(!consent||consent.subjectId!==device.subjectId||consent.state!=='granted'||consent.purpose!==item.consentPurpose)throw Object.assign(new Error('consent'),{code:'ACTIVE_PURPOSE_CONSENT_REQUIRED'})}store.batches.add(parsed.data.batchId);store.observations.push(...parsed.data.observations)})()}catch(error){const denied=handleDenied(error);if(denied)return denied;const code=(error as {code?:string})?.code;if(code==='BATCH_REPLAY')return r.code(409).send({error:'replay_detected'});if(code==='ACTIVE_PURPOSE_CONSENT_REQUIRED')return r.code(403).send({error:'active_purpose_consent_required'});throw error}return r.code(202).send({batchId:parsed.data.batchId,accepted:count})});
+  if(options.metadataRepository){if(!options.phase0PostgresAuthorization){try{await authorizeAll()}catch(error){const denied=handleDenied(error);if(denied)return denied;throw error}}try{const result=await options.metadataRepository.ingestBatch(device,parsed.data,options.phase0PostgresAuthorization?undefined:authorizeAll);return r.code(202).send(result)}catch(error){const denied=handleDenied(error);if(denied)return denied;const code=(error as {code?:string})?.code;if(code==='BATCH_REPLAY')return r.code(409).send({error:'replay_detected'});if(code==='ACTIVE_PURPOSE_CONSENT_REQUIRED')return r.code(403).send({error:'active_purpose_consent_required'});if(code==='DATA_SHARING_DISABLED')return r.code(403).send({error:'data_sharing_disabled'});if(code==='DEVICE_NOT_ACTIVE')return r.code(401).send({error:'device_not_active'});q.log.error({err:error},'metadata persistence failed');return r.header('retry-after','1').code(503).send({error:'metadata_persistence_unavailable',retryable:true})}}if(store.batches.has(parsed.data.batchId))return r.code(409).send({error:'replay_detected'});let shareOn=store.dataSharing.get(device.subjectId)??false;if(options.dataSharingRepository){try{shareOn=await options.dataSharingRepository.get(device.subjectId)}catch(error){q.log.error({err:error},'data-sharing verification failed');return r.header('retry-after','1').code(503).send({error:'data_sharing_unavailable',retryable:true})}}if(!shareOn)return r.code(403).send({error:'data_sharing_disabled'});const consentAllows=async(item:Observation)=>{let consent:Consent|null=store.consents.get(item.consentId)??null;if(options.consentRepository){const current=await options.consentRepository.getCurrent(item.consentId);consent=current?{id:item.consentId,decisionId:current.decisionId,decisionVersion:current.decisionVersion,subjectId:current.subjectId,purpose:current.purpose,policyVersion:current.policyVersion,purposeVersion:current.purposeVersion,state:current.state,expiresAt:current.expiresAt}:null}return !!consent&&consent.subjectId===device.subjectId&&consent.state==='granted'&&!!consent.expiresAt&&Date.parse(consent.expiresAt)>Date.now()&&consent.purpose===item.consentPurpose};for(const item of parsed.data.observations){let allowed:boolean;try{allowed=await consentAllows(item)}catch(error){q.log.error({err:error},'consent verification failed');return r.header('retry-after','1').code(503).send({error:'consent_verification_unavailable',retryable:true})}if(!allowed)return r.code(403).send({error:'active_purpose_consent_required',eventId:item.eventId})}
+  try{await authRequests.reduceRight<()=>Promise<void>>((next,request)=>()=>collectorAuth.runAuthorized(request,()=>next()),async()=>{if(store.batches.has(parsed.data.batchId))throw Object.assign(new Error('replay'),{code:'BATCH_REPLAY'});if(!(store.dataSharing.get(device.subjectId)??false))throw Object.assign(new Error('sharing'),{code:'DATA_SHARING_DISABLED'});for(const item of parsed.data.observations){const consent=store.consents.get(item.consentId);if(!consent||consent.subjectId!==device.subjectId||consent.state!=='granted'||!consent.expiresAt||Date.parse(consent.expiresAt)<=Date.now()||consent.purpose!==item.consentPurpose)throw Object.assign(new Error('consent'),{code:'ACTIVE_PURPOSE_CONSENT_REQUIRED'})}store.batches.add(parsed.data.batchId);store.observations.push(...parsed.data.observations)})()}catch(error){const denied=handleDenied(error);if(denied)return denied;const code=(error as {code?:string})?.code;if(code==='BATCH_REPLAY')return r.code(409).send({error:'replay_detected'});if(code==='ACTIVE_PURPOSE_CONSENT_REQUIRED')return r.code(403).send({error:'active_purpose_consent_required'});if(code==='DATA_SHARING_DISABLED')return r.code(403).send({error:'data_sharing_disabled'});throw error}return r.code(202).send({batchId:parsed.data.batchId,accepted:count})});
 
   // Intelligence & Value Engine Endpoints
   app.post('/v1/intelligence/events', async (req, reply) => {

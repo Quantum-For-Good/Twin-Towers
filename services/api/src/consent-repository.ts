@@ -7,6 +7,11 @@ export type ConsentDecision = {
   requestId: string;
   expectedEventSequence?: number;
   subjectId: string;
+  deviceId?: string;
+  studyId?: string;
+  scope?: Record<string, boolean>;
+  priceCents?: number;
+  expiresAt?: string;
   action: ConsentAction;
   policyVersion: string;
   purposeVersion: string;
@@ -23,6 +28,7 @@ export type CurrentConsent = {
   policyVersion: string;
   purposeVersion: string;
   state: 'granted' | 'revoked';
+  expiresAt?: string;
 };
 export interface ConsentRepository {
   recordDecision(input: ConsentDecision): Promise<ConsentEvent>;
@@ -44,13 +50,17 @@ export class PostgresConsentRepository implements ConsentRepository {
       for (const lockKey of lockKeys) {
         await client.query('SELECT pg_advisory_xact_lock(hashtext($1))', [lockKey]);
       }
-      const duplicate = await client.query<{ id: string; subject_id: string; permission_id: string; action: ConsentAction; policy_version: string; purpose_version: string; purpose: string; expected_event_sequence: number | null; event_sequence: number | string; occurred_at: Date | string }>(
-        'SELECT id, subject_id, permission_id, action, policy_version, purpose_version, purpose, expected_event_sequence, event_sequence, occurred_at FROM consent_events WHERE request_id = $1',
+      const duplicate = await client.query<{ id: string; subject_id: string; permission_id: string; device_id: string | null; study_id: string | null; purpose: string; scope: Record<string, boolean> | null; price_cents: number | null; expires_at: Date | string | null; action: ConsentAction; policy_version: string; purpose_version: string; expected_event_sequence: number | null; event_sequence: number | string; occurred_at: Date | string }>(
+        'SELECT id, subject_id, permission_id, device_id, study_id, purpose, scope, price_cents, expires_at, action, policy_version, purpose_version, expected_event_sequence, event_sequence, occurred_at FROM consent_events WHERE request_id = $1',
         [input.requestId]
       );
       if (duplicate.rows[0]) {
         const row = duplicate.rows[0];
-        if (row.subject_id !== input.subjectId || row.permission_id !== input.permissionId || row.action !== input.action || row.policy_version !== input.policyVersion || row.purpose_version !== input.purposeVersion || row.purpose !== input.purpose || (row.expected_event_sequence === null ? undefined : Number(row.expected_event_sequence)) !== input.expectedEventSequence) {
+        if (row.subject_id !== input.subjectId || row.permission_id !== input.permissionId || row.device_id !== (input.deviceId ?? null) || row.study_id !== (input.studyId ?? null) ||
+          JSON.stringify(row.scope ?? undefined) !== JSON.stringify(input.scope) || (row.price_cents ?? undefined) !== input.priceCents ||
+          (row.expires_at === null ? undefined : new Date(row.expires_at).toISOString()) !== input.expiresAt ||
+          row.action !== input.action || row.policy_version !== input.policyVersion || row.purpose_version !== input.purposeVersion || row.purpose !== input.purpose ||
+          (row.expected_event_sequence === null ? undefined : Number(row.expected_event_sequence)) !== input.expectedEventSequence) {
           const error = new Error('idempotency_key_reused_with_different_request');
           (error as Error & { code?: string }).code = 'IDEMPOTENCY_CONFLICT';
           throw error;
@@ -77,17 +87,20 @@ export class PostgresConsentRepository implements ConsentRepository {
         throw error;
       }
       const id = randomUUID();
-      const result = await client.query<{ occurred_at: Date | string; event_sequence: number | string }>(
+      const result = await client.query<{ occurred_at: Date | string; event_sequence: number | string; expires_at: Date | string | null }>(
         `INSERT INTO consent_events
-          (id, request_id, subject_id, permission_id, action, policy_version, purpose_version, purpose, expected_event_sequence, event_sequence, correlation_id)
-         VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11)
-         RETURNING occurred_at, event_sequence`,
-        [id, input.requestId, input.subjectId, input.permissionId, input.action, input.policyVersion, input.purposeVersion, input.purpose, input.expectedEventSequence ?? null, currentSequence + 1, id]
+          (id, request_id, subject_id, permission_id, device_id, study_id, action, policy_version, purpose_version, purpose,
+           scope, price_cents, expires_at, expected_event_sequence, event_sequence, correlation_id)
+         VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16)
+         RETURNING occurred_at, event_sequence, expires_at`,
+        [id, input.requestId, input.subjectId, input.permissionId, input.deviceId ?? null, input.studyId ?? null, input.action,
+          input.policyVersion, input.purposeVersion, input.purpose, input.scope ? JSON.stringify(input.scope) : null,
+          input.priceCents ?? null, input.expiresAt ?? null, input.expectedEventSequence ?? null, currentSequence + 1, id]
       );
       const saved = result.rows[0];
       if (!saved) throw new Error('consent_event_insert_returned_no_row');
       await client.query('COMMIT');
-      return { ...input, id, eventSequence: Number(saved.event_sequence), occurredAt: new Date(saved.occurred_at).toISOString() };
+      return { ...input, id, eventSequence: Number(saved.event_sequence), occurredAt: new Date(saved.occurred_at).toISOString(), expiresAt: saved.expires_at ? new Date(saved.expires_at).toISOString() : undefined };
     } catch (error) {
       await client.query('ROLLBACK').catch(() => undefined);
       throw error;
@@ -99,9 +112,9 @@ export class PostgresConsentRepository implements ConsentRepository {
   async getCurrent(permissionId: string): Promise<CurrentConsent | null> {
     const result = await this.pool.query<{
       id: string; subject_id: string; action: ConsentAction; policy_version: string;
-      purpose_version: string; purpose: string; event_sequence: number | string; occurred_at: Date | string;
+      purpose_version: string; purpose: string; event_sequence: number | string; occurred_at: Date | string; expires_at: Date | string | null;
     }>(
-      'SELECT id, subject_id, action, policy_version, purpose_version, purpose, event_sequence, occurred_at FROM consent_events WHERE permission_id = $1 ORDER BY event_sequence DESC LIMIT 1',
+      'SELECT id, subject_id, action, policy_version, purpose_version, purpose, event_sequence, occurred_at, expires_at FROM consent_events WHERE permission_id = $1 ORDER BY event_sequence DESC LIMIT 1',
       [permissionId]
     );
     const row = result.rows[0];
@@ -111,17 +124,18 @@ export class PostgresConsentRepository implements ConsentRepository {
       id: permissionId, decisionId: row.id, decisionVersion: String(row.event_sequence),
       subjectId: row.subject_id, purpose: row.purpose,
       policyVersion: row.policy_version, purposeVersion: row.purpose_version,
-      state: row.action === 'grant' ? 'granted' : 'revoked'
+      state: row.action === 'grant' && (!row.expires_at || new Date(row.expires_at).getTime() > Date.now()) ? 'granted' : 'revoked',
+      expiresAt: row.expires_at ? new Date(row.expires_at).toISOString() : undefined
     };
   }
 
   async getLatestForSubject(subjectId: string): Promise<CurrentConsent | null> {
     const result = await this.pool.query<{
       permission_id: string; id: string; subject_id: string; action: ConsentAction; policy_version: string;
-      purpose_version: string; purpose: string; event_sequence: number | string;
+      purpose_version: string; purpose: string; event_sequence: number | string; expires_at: Date | string | null;
     }>(
       `SELECT DISTINCT ON (permission_id) permission_id, id, subject_id, action, policy_version,
-              purpose_version, purpose, event_sequence
+              purpose_version, purpose, event_sequence, expires_at
          FROM consent_events
         WHERE subject_id = $1
         ORDER BY permission_id, event_sequence DESC`,
@@ -132,22 +146,27 @@ export class PostgresConsentRepository implements ConsentRepository {
     return {
       id: row.permission_id, decisionId: row.id, decisionVersion: String(row.event_sequence),
       subjectId: row.subject_id, purpose: row.purpose, policyVersion: row.policy_version,
-      purposeVersion: row.purpose_version, state: row.action === 'grant' ? 'granted' : 'revoked'
+      purposeVersion: row.purpose_version,
+      state: row.action === 'grant' && (!row.expires_at || new Date(row.expires_at).getTime() > Date.now()) ? 'granted' : 'revoked',
+      expiresAt: row.expires_at ? new Date(row.expires_at).toISOString() : undefined
     };
   }
 
   async getHistory(permissionId: string, subjectId: string): Promise<ConsentEvent[]> {
     const result = await this.pool.query<{
-      id: string; request_id: string; subject_id: string; action: ConsentAction; policy_version: string;
-      purpose_version: string; purpose: string; expected_event_sequence: number | null; event_sequence: number | string; occurred_at: Date | string;
+      id: string; request_id: string; subject_id: string; device_id: string | null; study_id: string | null;
+      scope: Record<string, boolean> | null; price_cents: number | null; action: ConsentAction; policy_version: string;
+      purpose_version: string; purpose: string; expected_event_sequence: number | null; event_sequence: number | string; occurred_at: Date | string; expires_at: Date | string | null;
     }>(
-      'SELECT id, request_id, subject_id, action, policy_version, purpose_version, purpose, expected_event_sequence, event_sequence, occurred_at FROM consent_events WHERE permission_id = $1 AND subject_id = $2 ORDER BY event_sequence ASC',
+      'SELECT id, request_id, subject_id, device_id, study_id, scope, price_cents, action, policy_version, purpose_version, purpose, expected_event_sequence, event_sequence, occurred_at, expires_at FROM consent_events WHERE permission_id = $1 AND subject_id = $2 ORDER BY event_sequence ASC',
       [permissionId, subjectId]
     );
     return result.rows.map(row => ({
-      id: row.id, permissionId, requestId: row.request_id, subjectId: row.subject_id, action: row.action,
+      id: row.id, permissionId, requestId: row.request_id, subjectId: row.subject_id,
+      deviceId: row.device_id ?? undefined, studyId: row.study_id ?? undefined,
+      scope: row.scope ?? undefined, priceCents: row.price_cents ?? undefined, action: row.action,
       policyVersion: row.policy_version, purposeVersion: row.purpose_version,
-      purpose: row.purpose, expectedEventSequence: row.expected_event_sequence === null ? undefined : Number(row.expected_event_sequence), eventSequence: Number(row.event_sequence), occurredAt: new Date(row.occurred_at).toISOString()
+      purpose: row.purpose, expectedEventSequence: row.expected_event_sequence === null ? undefined : Number(row.expected_event_sequence), eventSequence: Number(row.event_sequence), occurredAt: new Date(row.occurred_at).toISOString(), expiresAt: row.expires_at ? new Date(row.expires_at).toISOString() : undefined
     }));
   }
 }

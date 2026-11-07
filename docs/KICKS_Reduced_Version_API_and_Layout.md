@@ -24,7 +24,7 @@ the two in one server until the auth decision is made.
 
 | Method + path | Auth | Request | Response | Errors | Status |
 |---|---|---|---|---|---|
-| GET /health | none | — | `{status:'ok', service:'kicks-api', mode:'staging', collector:'metadata-only'}` | — | EXISTS |
+| GET /health | none | — | `{status:'ok', service:'kicks-api', collector:'metadata-only', durability:'memory' \| 'postgres'}` | — | EXISTS |
 | POST /v1/staging/devices | X-Admin-Secret | `{subjectId: uuid}` | 201 `{deviceId, token, tokenType:'Bearer'}` | 403 forbidden, 400 invalid_request | EXISTS — staging only; disable / remove for production |
 | POST /v1/devices/enroll | IdP token + X-Kicks-Device | `{deviceId}` | binds device to account `sub` | 403 device_owned_by_another_account | IN #62 — needs rework onto device-bearer |
 | POST /v1/devices/:id/revoke | IdP token / device Bearer | — | device revoked | 403 / 404 | IN #62 — needs rework |
@@ -62,12 +62,12 @@ Only the minimized schema is accepted; anything else is rejected, never stored.
 Client queue: 2,000 max, AES-GCM encrypted, backoff 2s → 5 min, discard after
 8 fails, auth re-checked every 15s.
 
-Collector eligibility (IN #68, informational until Postgres evidence exists):
-POST /v1/collector/eligibility returns 200, eligible true, state ELIGIBLE,
-with authorizationId / expiresAt undefined until the authoritative evidence
-provider exists. Metadata ingestion and intelligence events gate at
-503 collector_authorization_unavailable / BLOCKED_SERVICE_UNAVAILABLE when
-that provider is missing.
+Phase 0 eligibility and metadata authorization use PostgreSQL device status,
+current unexpired consent and the independent data-sharing flag. This path does
+not wait for a chain proof. Metadata ingestion rechecks these gates inside the
+same transaction that stores the batch. The stricter proof-verification
+authorization service remains available separately; chain anchoring is not the
+Phase 0 live gate.
 
 ### 4. Opportunities, wallet & ledger
 
