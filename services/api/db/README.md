@@ -17,12 +17,13 @@ Turning sharing off stops local collectors through the configured stop hook;
 native queued-data purge and 15-second authority polling still need end-to-end
 verification. The separate evidence-provider path still requires chain proof.
 
-The integration test only accepts `KICKS_DISPOSABLE_DATABASE_URL` with host
+The integration test only accepts `KICKS_TEST_DATABASE_URL` with host
 `127.0.0.1`, port `5433`, database `kicks_disposable_test`, and no URL query
 parameters. Provision that disposable database separately on the designated
 D: drive using the approved runbook; never point tests at an existing database.
 The test creates and removes a uniquely named schema within that database. Run
-`npm run test --workspace @kicks/api` with the variable set. Without it, the
+`KICKS_TEST_DATABASE_URL=postgresql://<user>:<password>@127.0.0.1:5433/kicks_disposable_test npm run test --workspace @kicks/api`
+with the variable set. Without it, the
 integration test is explicitly skipped, not passed.
 
 The approved D: drive runbook is not present in this checkout. The migration

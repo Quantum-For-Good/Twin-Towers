@@ -10,7 +10,7 @@ import { runMigrations } from './migrations.js';
 import { assertDisposableDatabaseUrl } from './disposable-test-database.js';
 import { PostgresDataSharingRepository } from './data-sharing-repository.js';
 
-const databaseUrl = process.env.KICKS_DISPOSABLE_DATABASE_URL;
+const databaseUrl = process.env.KICKS_TEST_DATABASE_URL;
 
 test('disposable database guard rejects other endpoints and connection overrides', () => {
   assert.doesNotThrow(() => assertDisposableDatabaseUrl('postgresql://test:test@127.0.0.1:5433/kicks_disposable_test'));
@@ -22,7 +22,7 @@ test('disposable database guard rejects other endpoints and connection overrides
   ]) assert.throws(() => assertDisposableDatabaseUrl(url));
 });
 
-test('disposable PostgreSQL retains consent, retries, revocation and batch replay across restarts', { skip: !databaseUrl && 'KICKS_DISPOSABLE_DATABASE_URL not set' }, async () => {
+test('disposable PostgreSQL retains consent, retries, revocation and batch replay across restarts', { skip: !databaseUrl && 'KICKS_TEST_DATABASE_URL not set' }, async () => {
   assert.ok(databaseUrl);
   assertDisposableDatabaseUrl(databaseUrl);
 
