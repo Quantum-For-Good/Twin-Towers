@@ -17,15 +17,23 @@ Turning sharing off stops local collectors through the configured stop hook;
 native queued-data purge and 15-second authority polling still need end-to-end
 verification. The separate evidence-provider path still requires chain proof.
 
-The integration test only accepts `KICKS_DISPOSABLE_DATABASE_URL` with host
-`127.0.0.1`, port `5433`, database `kicks_disposable_test`, and no URL query
-parameters. Provision that disposable database separately on the designated
-D: drive using the approved runbook; never point tests at an existing database.
-The test creates and removes a uniquely named schema within that database. Run
-`npm run test --workspace @kicks/api` with the variable set. Without it, the
-integration test is explicitly skipped, not passed.
+The integration test only accepts a disposable URL with host `127.0.0.1`, port
+`5433`, database `kicks_disposable_test`, and no URL query parameters. The
+current test reads `KICKS_DISPOSABLE_DATABASE_URL`; the follow-up naming uses
+`KICKS_TEST_DATABASE_URL`. During that transition, set both names to the same
+disposable URL. Never use `KICKS_DATABASE_URL` for this test. The test creates
+and removes uniquely named schemas, verifies migrated tables and migration
+history, and checks that a failed migration rolls its schema changes back.
 
-The approved D: drive runbook is not present in this checkout. The migration
-runner is implemented in `src/migrations.ts`; until the integration test is run
-on the designated disposable database, the SQL migration and restart guarantees
-remain unverified.
+The `quality` workflow starts an isolated PostgreSQL service for the test,
+publishes it only on runner port `5433`, and fails early if either test variable
+is missing. Locally, run
+`npm run test --workspace @kicks/api` with the disposable variable(s) set;
+without one, the integration test is skipped, not passed.
+
+For the approved Windows D: drive disposable run, follow
+[`DISPOSABLE_POSTGRES_WINDOWS.md`](DISPOSABLE_POSTGRES_WINDOWS.md). It creates
+a fresh, loopback-only cluster and database; it must not connect to, stop, or
+modify the existing PostgreSQL instance or port `5432`. The actual Windows
+execution remains outside this run. Until it passes there, that operational
+validation remains outstanding.

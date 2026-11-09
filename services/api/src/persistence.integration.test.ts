@@ -6,7 +6,7 @@ import { buildServer } from './server.js';
 import { PostgresConsentRepository } from './consent-repository.js';
 import { PostgresDeviceRepository } from './device-repository.js';
 import { PostgresMetadataRepository, type MetadataBatch } from './metadata-repository.js';
-import { runMigrations } from './migrations.js';
+import { applyMigrations, runMigrations } from './migrations.js';
 import { assertDisposableDatabaseUrl } from './disposable-test-database.js';
 import { PostgresDataSharingRepository } from './data-sharing-repository.js';
 
@@ -27,9 +27,12 @@ test('disposable PostgreSQL retains consent, retries, revocation and batch repla
   assertDisposableDatabaseUrl(databaseUrl);
 
   const schema = `kicks_test_${randomBytes(12).toString('hex')}`;
+  const rollbackSchema = `kicks_rollback_${randomBytes(12).toString('hex')}`;
   const admin = new pg.Pool({ connectionString: databaseUrl });
   let pool: pg.Pool | undefined;
+  let rollbackPool: pg.Pool | undefined;
   let schemaCreated = false;
+  let rollbackSchemaCreated = false;
   try {
     await admin.query(`CREATE SCHEMA "${schema}"`);
     schemaCreated = true;
@@ -37,6 +40,40 @@ test('disposable PostgreSQL retains consent, retries, revocation and batch repla
     pool = newPool();
     await runMigrations(pool);
     await runMigrations(pool);
+    const schemaTables = await pool.query(
+      `SELECT table_name FROM information_schema.tables
+       WHERE table_schema = $1 AND table_name IN
+         ('schema_migrations', 'devices', 'consent_events', 'data_sharing', 'metadata_batches', 'metadata_observations')`,
+      [schema]
+    );
+    assert.deepEqual(
+      schemaTables.rows.map(row => row.table_name).sort(),
+      ['consent_events', 'data_sharing', 'devices', 'metadata_batches', 'metadata_observations', 'schema_migrations'].sort()
+    );
+    assert.deepEqual(
+      (await pool.query('SELECT name FROM schema_migrations ORDER BY name')).rows.map(row => row.name),
+      ['001_phase0_foundation.sql']
+    );
+
+    await admin.query(`CREATE SCHEMA "${rollbackSchema}"`);
+    rollbackSchemaCreated = true;
+    rollbackPool = new pg.Pool({ connectionString: databaseUrl, options: `-c search_path=${rollbackSchema}` });
+    const rollbackClient = await rollbackPool.connect();
+    try {
+      await assert.rejects(applyMigrations(rollbackClient, [
+        { name: '001_probe.sql', sql: 'CREATE TABLE migration_rollback_probe (id integer PRIMARY KEY)', checksum: 'probe' },
+        { name: '002_failure.sql', sql: 'THIS IS NOT VALID SQL', checksum: 'failure' }
+      ]));
+      const rollbackState = await rollbackClient.query(
+        `SELECT to_regclass('migration_rollback_probe') AS probe,
+                to_regclass('schema_migrations') AS migrations`
+      );
+      assert.equal(rollbackState.rows[0]?.probe, null);
+      assert.equal(rollbackState.rows[0]?.migrations, null);
+    } finally {
+      rollbackClient.release();
+    }
+
     const bearer = randomBytes(32).toString('base64url');
     const device = { id: randomUUID(), subjectId: randomUUID(), tokenHash: createHash('sha256').update(bearer).digest('hex'), revoked: false };
     const decision = {
@@ -123,6 +160,8 @@ test('disposable PostgreSQL retains consent, retries, revocation and batch repla
     assert.equal(await new PostgresDeviceRepository(pool).findActiveByTokenHash(device.tokenHash), null);
   } finally {
     if (pool) await pool.end();
+    if (rollbackPool) await rollbackPool.end();
+    if (rollbackSchemaCreated) await admin.query(`DROP SCHEMA "${rollbackSchema}" CASCADE`);
     if (schemaCreated) await admin.query(`DROP SCHEMA "${schema}" CASCADE`);
     await admin.end();
   }
