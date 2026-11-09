@@ -245,7 +245,7 @@ Notion is the tracker and the source of truth for gates, holds, shifts, and
 evidence — it is not a builder. It cannot write code, run builds, sign apps,
 run CI, or deploy. The agents in Notion are management roles (CTO, COO, QA,
 Security, Oversight) that *coordinate and verify*; the building happens in
-the GitHub repo (Expo / React Native + Fastify + Postgres), by devs / Muse
+the GitHub repo (Expo / React Native + Fastify + Postgres), by devs
 with passing checks and Ezekiel's explicit approval per merge. Use Notion to
 track the work and to hold the go / no-go gates — do not ask it to build the app.
 
