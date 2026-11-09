@@ -58,7 +58,7 @@ export function AccountPermissions() {
     try { await read(id); } catch { setError('Your saved permission could not be confirmed. Reload before making changes.'); }
     finally { setBusy(false); }
   };
-  const decide = async (action: 'grant' | 'revoke') => {
+  const decide = async (action: 'grant' | 'deny' | 'revoke') => {
     if (busy || !loaded || !configured) return;
     setBusy(true); setError(null); setLoaded(false);
     try {
@@ -93,10 +93,12 @@ export function AccountPermissions() {
         <Text style={ui.h2}>Network monitoring permission</Text>
         <Text style={ui.body}>{purpose}</Text>
         <Text style={ui.body}>This permission covers the reviewed monitoring purpose only. It does not authorize compensated studies or sharing your data.</Text>
+        <Text style={ui.body}>You can say no and change your choice here later. Saying no keeps monitoring off.</Text>
         <Text style={ui.label}>{!loaded ? 'NOT CONFIRMED' : consent?.action === 'grant' ? 'PERMISSION GRANTED' : 'PERMISSION NOT GRANTED'}</Text>
-        <View style={{ flexDirection: 'row', gap: 24 }}>
-          <Pressable accessibilityRole="button" style={{ minHeight: 44, justifyContent: "center" }} disabled={busy || !loaded} onPress={() => decide('grant')}><Text style={ui.label}>GRANT</Text></Pressable>
-          <Pressable accessibilityRole="button" style={{ minHeight: 44, justifyContent: "center" }} disabled={busy || !loaded} onPress={() => decide('revoke')}><Text style={ui.label}>REVOKE</Text></Pressable>
+        <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: 16 }}>
+          <Pressable accessibilityRole="button" accessibilityLabel="Allow network monitoring" style={{ minHeight: 44, justifyContent: "center" }} disabled={busy || !loaded} onPress={() => decide('grant')}><Text style={ui.label}>ALLOW</Text></Pressable>
+          <Pressable accessibilityRole="button" accessibilityLabel="Decline network monitoring" style={{ minHeight: 44, justifyContent: "center" }} disabled={busy || !loaded} onPress={() => decide('deny')}><Text style={ui.label}>NOT NOW</Text></Pressable>
+          {consent?.action === 'grant' && <Pressable accessibilityRole="button" accessibilityLabel="Revoke network monitoring permission" style={{ minHeight: 44, justifyContent: "center" }} disabled={busy || !loaded} onPress={() => decide('revoke')}><Text style={ui.label}>REVOKE</Text></Pressable>}
         </View>
         <Text style={ui.body}>A saved permission does not mean the iOS collector is running.</Text>
       </Card>}

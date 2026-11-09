@@ -161,6 +161,39 @@ KICK'S branding throughout, Kick mascot.
   Amount / Shared / Expires / Access, View proof >
 - Bottom nav: Vault / Ledger / Requests / Settings
 
+### Consent and enrollment acceptance criteria
+
+These are release criteria, not claims that the enrollment flow is complete.
+
+- Use short, plain-language summaries that say what is requested, why, who
+  receives it, the reward (clearly marked as an example where applicable), and
+  when access ends. Show these terms before the decision and repeat the exact
+  saved choices and expiry on the receipt.
+- Allow users to decline without penalty or blocking unrelated app use. Record
+  the decline as a decision; no collection or upload is allowed. The user can
+  return to Permissions later and make a new decision.
+- Show the current enrollment step and remaining steps. If a user leaves,
+  preserve only non-sensitive, incomplete form progress; never treat a draft
+  as consent. Validate incomplete fields inline and provide a safe way to
+  continue or discard the draft.
+- On loss of connectivity or app closure, do not display an unconfirmed
+  decision as saved. On return, reload the authoritative server state before
+  showing or changing consent. Retries must be idempotent; if the saved state
+  cannot be confirmed, keep collection off and offer retry.
+- Let users review and change saved choices from Permissions. A change creates
+  a new append-only decision, and the screen reflects server-confirmed state.
+  Expired or revoked decisions never resume collection automatically.
+- All steps, choices, errors, and recovery actions must be operable with a
+  keyboard and announced meaningfully by screen readers. Labels must identify
+  their control, errors must be announced and actionable, and focus must move
+  to the error summary after a failed submission.
+- Before release, test declined consent, abandonment and resume, incomplete
+  input, offline submission, return after expiry, and changed choices. Record
+  enrollment starts/completions, declines, recovery completions, and consent
+  comprehension in aggregate only; do not include consent contents or user
+  identifiers. Report denominators and compare completion and comprehension
+  against a pre-change baseline before claiming an improvement.
+
 ### Exfiltration feed — inside Monitoring (Engine tab)
 
 Monitoring is consistent by design — it runs continuously, in the background,
