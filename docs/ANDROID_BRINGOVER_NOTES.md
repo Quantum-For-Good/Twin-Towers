@@ -1,7 +1,7 @@
 # Android-first bring-over — notes
 
-Source: `DataStorm-Inc/KICKS_101_Android-`, branch
-`copilot/implement-native-collector-end-to-end` (PR #62, head `8083b72`),
+Source: `DataStorm-Inc/KICKS_101_Android-`, the native-collector implementation branch
+(PR #62, head `8083b72`),
 compared against that repo's main (`2f357dc`).
 Destination: this repo, branch `android/collector-bringover` → main (draft PR).
 
