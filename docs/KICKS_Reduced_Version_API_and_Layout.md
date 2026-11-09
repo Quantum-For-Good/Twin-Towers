@@ -163,7 +163,16 @@ KICK'S branding throughout, Kick mascot.
 
 ### Consent and enrollment acceptance criteria
 
-These are release criteria, not claims that the enrollment flow is complete.
+The iOS account-registration screen now has two steps (email, then password and
+account choices), a step indicator, inline email validation, accessible field
+labels, and screen-reader focus on errors. Users can opt in to an encrypted
+on-device draft, or explicitly save it before returning to sign-in. Drafts
+expire after 30 days and contain only the email, current step, optional
+marketing choice, and policy versions; passwords and consent choices are never
+saved. Users can resume or discard a draft. This is registration recovery, not
+proof that a user has granted monitoring consent.
+
+Remaining release criteria:
 
 - Use short, plain-language summaries that say what is requested, why, who
   receives it, the reward (clearly marked as an example where applicable), and
@@ -172,10 +181,10 @@ These are release criteria, not claims that the enrollment flow is complete.
 - Allow users to decline without penalty or blocking unrelated app use. Record
   the decline as a decision; no collection or upload is allowed. The user can
   return to Permissions later and make a new decision.
-- Show the current enrollment step and remaining steps. If a user leaves,
-  preserve only non-sensitive, incomplete form progress; never treat a draft
-  as consent. Validate incomplete fields inline and provide a safe way to
-  continue or discard the draft.
+- Test that leaving and reopening the app restores an opted-in draft, while
+  opting out or discarding it removes the local draft. Test that changed Terms
+  or Privacy versions restart the decision step and require fresh acceptance.
+  Never treat a draft as consent.
 - On loss of connectivity or app closure, do not display an unconfirmed
   decision as saved. On return, reload the authoritative server state before
   showing or changing consent. Retries must be idempotent; if the saved state
@@ -183,10 +192,10 @@ These are release criteria, not claims that the enrollment flow is complete.
 - Let users review and change saved choices from Permissions. A change creates
   a new append-only decision, and the screen reflects server-confirmed state.
   Expired or revoked decisions never resume collection automatically.
-- All steps, choices, errors, and recovery actions must be operable with a
-  keyboard and announced meaningfully by screen readers. Labels must identify
-  their control, errors must be announced and actionable, and focus must move
-  to the error summary after a failed submission.
+- Verify all steps, choices, errors, and recovery actions with keyboard and
+  screen-reader testing on supported devices. Labels must identify their
+  control, errors must be announced and actionable, and focus must move to the
+  error summary after a failed submission.
 - Before release, test declined consent, abandonment and resume, incomplete
   input, offline submission, return after expiry, and changed choices. Record
   enrollment starts/completions, declines, recovery completions, and consent
