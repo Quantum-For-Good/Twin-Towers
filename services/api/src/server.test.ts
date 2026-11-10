@@ -209,6 +209,7 @@ test('declined consent never authorizes ingestion', async () => {
   const { app, store, token } = await setup();
   const permissionId = randomUUID();
   const headers = { authorization: ['Bearer', token].join(' ') };
+  await app.inject({ method: 'PUT', url: '/v1/data-sharing', headers, payload: { dataSharing: true } });
   const decision = await app.inject({
     method: 'POST',
     url: '/v1/consent-events',
