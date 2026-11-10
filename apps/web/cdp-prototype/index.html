@@ -42,24 +42,26 @@
     <p class="screen-note">Mock data — illustrative only, not a valuation or an earnings promise.</p>
     <div class="stat-grid">
       <div class="stat-card hero">
-        <div class="stat-label">Net Data Worth — Current Portfolio Value</div>
-        <div class="stat-value">$2,487</div>
+        <div class="stat-label">Portfolio Value</div>
+        <div class="stat-value">Not yet valued</div>
+        <p class="stat-sub">Value appears as studies and buyers join. Today your portfolio is your consented data, under your control — consent, DNS monitoring, vault, ledger.</p>
       </div>
       <div class="stat-card">
-        <div class="stat-label">Projected Annual Value</div>
-        <div class="stat-value">$641</div>
+        <div class="stat-label">Active Consents</div>
+        <div class="stat-value"><span class="license-count">3</span></div>
       </div>
       <div class="stat-card">
-        <div class="stat-label">Active Data Licenses</div>
-        <div class="stat-value"><span class="license-count">14</span></div>
+        <div class="stat-label">Data Sources Connected</div>
+        <div class="stat-value">2</div>
       </div>
       <div class="stat-card">
-        <div class="stat-label">Data Sources</div>
-        <div class="stat-value">38</div>
+        <div class="stat-label">DNS Observations</div>
+        <div class="stat-value">1,240</div>
+        <p class="stat-sub">Mock count — minimized DNS observations only.</p>
       </div>
       <div class="stat-card">
-        <div class="stat-label">Portfolio Health Score</div>
-        <div class="stat-value">91<span class="stat-suffix">/100</span></div>
+        <div class="stat-label">Vault</div>
+        <div class="stat-value">Locked</div>
       </div>
     </div>
 
@@ -72,24 +74,13 @@
     </div>
 
     <div class="card">
-      <h2>Active Data Licenses <span class="count-pill"><span class="license-count">14</span> active</span></h2>
-      <p class="screen-note">Mock licenses. Revoking is a mock action in this prototype. In the real product, revocation applies promptly and the license stops being counted.</p>
+      <h2>Active Consents <span class="count-pill"><span class="license-count">3</span> active</span></h2>
+      <p class="screen-note">Mock consent records, from the current product: the DNS monitoring consent plus consented categories from the existing consent flow. Revoking is a mock action in this prototype. In the real product, revocation applies promptly and the consent stops being counted.</p>
       <p id="revokeNote" class="revoke-note" hidden></p>
       <ul class="license-list" id="licenseList">
-        <li><span><strong>Heart Health Study</strong> — Research University</span><button class="revoke-btn" data-license="Heart Health Study">Revoke</button></li>
-        <li><span><strong>Retail Research Panel</strong> — Retail Research</span><button class="revoke-btn" data-license="Retail Research Panel">Revoke</button></li>
-        <li><span><strong>AI Training Dataset</strong> — AI Research Lab</span><button class="revoke-btn" data-license="AI Training Dataset">Revoke</button></li>
-        <li><span><strong>Usage Analytics Program</strong> — App Analytics</span><button class="revoke-btn" data-license="Usage Analytics Program">Revoke</button></li>
-        <li><span><strong>Fitness Tracking Study</strong> — Health Research</span><button class="revoke-btn" data-license="Fitness Tracking Study">Revoke</button></li>
-        <li><span><strong>Grocery Purchase Patterns</strong> — Retail Research</span><button class="revoke-btn" data-license="Grocery Purchase Patterns">Revoke</button></li>
-        <li><span><strong>Streaming Habits Panel</strong> — Media Research</span><button class="revoke-btn" data-license="Streaming Habits Panel">Revoke</button></li>
-        <li><span><strong>EV Charging Behavior</strong> — Mobility Research</span><button class="revoke-btn" data-license="EV Charging Behavior">Revoke</button></li>
-        <li><span><strong>Smart Home Usage Study</strong> — Device Research</span><button class="revoke-btn" data-license="Smart Home Usage Study">Revoke</button></li>
-        <li><span><strong>Veteran Technology Survey</strong> — Survey Panel</span><button class="revoke-btn" data-license="Veteran Technology Survey">Revoke</button></li>
-        <li><span><strong>Diabetes Tracking Data</strong> — Health Research</span><button class="revoke-btn" data-license="Diabetes Tracking Data">Revoke</button></li>
-        <li><span><strong>Mobility Patterns Study</strong> — Urban Research</span><button class="revoke-btn" data-license="Mobility Patterns Study">Revoke</button></li>
-        <li><span><strong>Wearable Sleep Study</strong> — Health Research</span><button class="revoke-btn" data-license="Wearable Sleep Study">Revoke</button></li>
-        <li><span><strong>Shopping Receipts Panel</strong> — Retail Research</span><button class="revoke-btn" data-license="Shopping Receipts Panel">Revoke</button></li>
+        <li><span><strong>DNS Monitoring</strong> — Consent-gated DNS observation (Android)</span><button class="revoke-btn" data-license="DNS Monitoring">Revoke</button></li>
+        <li><span><strong>Distance &amp; pace</strong> — Consent flow (Modify)</span><button class="revoke-btn" data-license="Distance &amp; pace">Revoke</button></li>
+        <li><span><strong>Exact map routes</strong> — Consent flow (Modify)</span><button class="revoke-btn" data-license="Exact map routes">Revoke</button></li>
       </ul>
     </div>
   </section>
@@ -294,7 +285,7 @@
       <div class="card">
         <h2>Key Metrics</h2>
         <dl class="metric-list">
-          <div><dt>Number of active licenses</dt><dd><span class="license-count">14</span></dd></div>
+          <div><dt>Number of active consents</dt><dd><span class="license-count">3</span></dd></div>
           <div><dt>Data retained by buyers</dt><dd>3 buyers retain data beyond 30 days (mock)</dd></div>
           <div><dt>Geographic transfers</dt><dd>2 transfers recorded (mock)</dd></div>
           <div><dt>Re-identification probability</dt><dd>Low — 4% (mock)</dd></div>
@@ -303,8 +294,8 @@
     </div>
     <div class="card">
       <h2>What lowers risk</h2>
-      <p>Revoking a license removes it from your exposure immediately. Fewer active
-      licenses means less data held by others. Nothing here asks you to share more —
+      <p>Revoking a consent removes it from your exposure immediately. Fewer active
+      consents means less data held by others. Nothing here asks you to share more —
       KICK'S never awards over-sharing.</p>
     </div>
   </section>

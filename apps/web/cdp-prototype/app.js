@@ -106,7 +106,7 @@
   }
 
   /* ---------- License revoke (mock) ---------- */
-  var activeCount = 14;
+  var activeCount = 3;
   var revokeNote = document.getElementById('revokeNote');
 
   function updateLicenseCounts() {
@@ -131,9 +131,10 @@
     button.replaceWith(tag);
     revokeNote.hidden = false;
     revokeNote.textContent = 'Mock action: "' + name + '" revoked. It no longer counts toward your portfolio. ' +
-      'Active licenses: ' + activeCount + '.';
+      'Active consents: ' + activeCount + '.';
   });
 
   renderDonut();
   renderLineChart();
+  updateLicenseCounts();
 })();

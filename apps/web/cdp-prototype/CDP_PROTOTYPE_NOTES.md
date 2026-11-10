@@ -19,9 +19,9 @@ Files:
 
 Screens (all from the founder's spec):
 
-1. Portfolio Home — Net Data Worth $2,487, Projected Annual Value $641,
-   Active Data Licenses 14, Data Sources 38, Portfolio Health Score 91/100,
-   plus a revocable license list.
+1. Portfolio Home (reduced 2026-11-10, see below) — Portfolio Value "Not yet
+   valued", Active Consents 3, Data Sources Connected 2, DNS Observations 1,240
+   (mock), Vault Locked, plus a revocable consent list (3 records).
 2. Asset Allocation — Behavioral 42%, Health 19%, Location 14%, Purchase 11%,
    Financial 8%, Device Telemetry 6% (donut chart).
 3. Data Value Heat Map — Health Very High, Purchase Intent High, Financial
@@ -44,6 +44,38 @@ Screens (all from the founder's spec):
 13. Data Credit Rating — Portfolio Reliability Score, grade "AAA Data Contributor",
     factors: verified identity, device consistency, data completeness, historical
     participation.
+
+## Reduced intro (2026-11-10)
+
+The founder asked to reduce the CDP's introductory info to fit where KICK'S is
+now. The original intro showed a mature market: Net Data Worth $2,487, Projected
+Annual Value $641, 14 study licenses, 38 data sources, Portfolio Health Score
+91/100. That is not where KICK'S is.
+
+Where KICK'S is now: reduced MVP, Android-first, launching Nov 17. The core is
+DNS monitoring plus the consent flow (Ask/Modify/Receipt) plus vault plus
+ledger/revoke. Phase 0 is not yet operable. There are no live valuations, no
+buyers, no earnings, no marketplace yet.
+
+What changed in the intro (Portfolio Home only):
+- Cut: the dollar-valuation hero ($2,487), the $641 projected annual value, the
+  91/100 health score, the 38 data sources, and the 14 study licenses.
+- Now shows: Portfolio Value "Not yet valued — value appears as studies and
+  buyers join", Active Consents 3, Data Sources Connected 2, DNS Observations
+  1,240 (mock count, minimized DNS observations only), Vault Locked.
+- The consent list is now 3 consent records from the current product — the DNS
+  Monitoring consent plus two consented categories from the existing consent flow
+  (Distance & pace, Exact map routes) — framed as consent records, not study
+  licenses. Revoke still works (mock): revoking flips the row to Revoked and
+  decrements the active-consent count everywhere it appears (Home and the Risk
+  Dashboard share the count; the count is also synced on page load).
+- The Risk Dashboard's "Number of active licenses" metric follows the same
+  shared count and now reads "Number of active consents" (3).
+
+What did not change: the other 12 screens are untouched — they are the future
+vision, already labelled mock on every screen. No onboarding question or signup
+step was added; the reduction removed content only. All figures remain mock and
+labelled; the "we never award over-sharing" rule still holds.
 
 ## What is mock
 
@@ -92,11 +124,11 @@ for this prototype.
 
 ## Consent-gated framing
 
-The portfolio only shows data the user has consented to share. Every license on
-the Home screen has a Revoke affordance (mock in the prototype: revoking flips the
-row to Revoked and decrements the active-license count everywhere it appears).
-In the real product, revocation would apply promptly and the license would stop
-being counted, per the existing Revoke Now behavior.
+The portfolio only shows data the user has consented to share. Every consent
+record on the Home screen has a Revoke affordance (mock in the prototype:
+revoking flips the row to Revoked and decrements the active-consent count
+everywhere it appears). In the real product, revocation would apply promptly and
+the consent would stop being counted, per the existing Revoke Now behavior.
 
 ## What would need to be real before shipping
 

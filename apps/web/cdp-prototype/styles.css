@@ -131,6 +131,7 @@ h2 { font-size: 18px; margin: 0 0 12px; }
 .stat-label { font-size: 13px; color: var(--muted); text-transform: uppercase; letter-spacing: 0.04em; }
 .stat-value { font-size: 34px; font-weight: 800; margin-top: 4px; }
 .stat-suffix { font-size: 18px; color: var(--muted); }
+.stat-sub { font-size: 14px; color: var(--muted); margin: 8px 0 0; }
 
 .count-pill {
   font-size: 13px;
