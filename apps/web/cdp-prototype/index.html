@@ -1,0 +1,443 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>KICK'S — Consumer Data Portfolio (Mock Prototype)</title>
+<link rel="stylesheet" href="styles.css">
+</head>
+<body>
+<header class="app-header">
+  <div class="brand">KICK'S <span>Consumer Data Portfolio</span></div>
+  <div class="mock-badge">MOCK PROTOTYPE</div>
+</header>
+
+<div class="mock-banner">
+  Mock data — illustrative only, not a valuation or an earnings promise.
+  Every figure on every screen is illustrative. This portfolio is built only from
+  data you have already consented to share through KICK'S onboarding.
+  It adds no onboarding questions and no new signup steps.
+</div>
+
+<nav class="screen-nav" id="screenNav" aria-label="Portfolio screens">
+  <button data-screen="home" class="active">Portfolio Home</button>
+  <button data-screen="allocation">Asset Allocation</button>
+  <button data-screen="heatmap">Value Heat Map</button>
+  <button data-screen="income">Income Statement</button>
+  <button data-screen="balancesheet">Balance Sheet</button>
+  <button data-screen="terminal">Demand Terminal</button>
+  <button data-screen="opportunities">Opportunity Scanner</button>
+  <button data-screen="risk">Privacy Risk</button>
+  <button data-screen="liquidity">Liquidity Meter</button>
+  <button data-screen="performance">Performance History</button>
+  <button data-screen="diversification">Diversification</button>
+  <button data-screen="marketplace">Marketplace Analytics</button>
+  <button data-screen="credit">Data Credit Rating</button>
+</nav>
+
+<main>
+  <!-- 1. PORTFOLIO HOME -->
+  <section id="home" class="screen active" aria-label="Portfolio home">
+    <h1>Your Data Portfolio</h1>
+    <p class="screen-note">Mock data — illustrative only, not a valuation or an earnings promise.</p>
+    <div class="stat-grid">
+      <div class="stat-card hero">
+        <div class="stat-label">Net Data Worth — Current Portfolio Value</div>
+        <div class="stat-value">$2,487</div>
+      </div>
+      <div class="stat-card">
+        <div class="stat-label">Projected Annual Value</div>
+        <div class="stat-value">$641</div>
+      </div>
+      <div class="stat-card">
+        <div class="stat-label">Active Data Licenses</div>
+        <div class="stat-value"><span class="license-count">14</span></div>
+      </div>
+      <div class="stat-card">
+        <div class="stat-label">Data Sources</div>
+        <div class="stat-value">38</div>
+      </div>
+      <div class="stat-card">
+        <div class="stat-label">Portfolio Health Score</div>
+        <div class="stat-value">91<span class="stat-suffix">/100</span></div>
+      </div>
+    </div>
+
+    <div class="card">
+      <h2>How your portfolio is built</h2>
+      <p>Your portfolio is built only from data you have already consented to share
+      through KICK'S onboarding. This prototype adds <strong>zero onboarding questions</strong> —
+      no new questions, no new profiling step, no longer signup. Consent is revocable
+      at any time: revoke a license below and it stops counting toward your portfolio.</p>
+    </div>
+
+    <div class="card">
+      <h2>Active Data Licenses <span class="count-pill"><span class="license-count">14</span> active</span></h2>
+      <p class="screen-note">Mock licenses. Revoking is a mock action in this prototype. In the real product, revocation applies promptly and the license stops being counted.</p>
+      <p id="revokeNote" class="revoke-note" hidden></p>
+      <ul class="license-list" id="licenseList">
+        <li><span><strong>Heart Health Study</strong> — Research University</span><button class="revoke-btn" data-license="Heart Health Study">Revoke</button></li>
+        <li><span><strong>Retail Research Panel</strong> — Retail Research</span><button class="revoke-btn" data-license="Retail Research Panel">Revoke</button></li>
+        <li><span><strong>AI Training Dataset</strong> — AI Research Lab</span><button class="revoke-btn" data-license="AI Training Dataset">Revoke</button></li>
+        <li><span><strong>Usage Analytics Program</strong> — App Analytics</span><button class="revoke-btn" data-license="Usage Analytics Program">Revoke</button></li>
+        <li><span><strong>Fitness Tracking Study</strong> — Health Research</span><button class="revoke-btn" data-license="Fitness Tracking Study">Revoke</button></li>
+        <li><span><strong>Grocery Purchase Patterns</strong> — Retail Research</span><button class="revoke-btn" data-license="Grocery Purchase Patterns">Revoke</button></li>
+        <li><span><strong>Streaming Habits Panel</strong> — Media Research</span><button class="revoke-btn" data-license="Streaming Habits Panel">Revoke</button></li>
+        <li><span><strong>EV Charging Behavior</strong> — Mobility Research</span><button class="revoke-btn" data-license="EV Charging Behavior">Revoke</button></li>
+        <li><span><strong>Smart Home Usage Study</strong> — Device Research</span><button class="revoke-btn" data-license="Smart Home Usage Study">Revoke</button></li>
+        <li><span><strong>Veteran Technology Survey</strong> — Survey Panel</span><button class="revoke-btn" data-license="Veteran Technology Survey">Revoke</button></li>
+        <li><span><strong>Diabetes Tracking Data</strong> — Health Research</span><button class="revoke-btn" data-license="Diabetes Tracking Data">Revoke</button></li>
+        <li><span><strong>Mobility Patterns Study</strong> — Urban Research</span><button class="revoke-btn" data-license="Mobility Patterns Study">Revoke</button></li>
+        <li><span><strong>Wearable Sleep Study</strong> — Health Research</span><button class="revoke-btn" data-license="Wearable Sleep Study">Revoke</button></li>
+        <li><span><strong>Shopping Receipts Panel</strong> — Retail Research</span><button class="revoke-btn" data-license="Shopping Receipts Panel">Revoke</button></li>
+      </ul>
+    </div>
+  </section>
+
+  <!-- 2. ASSET ALLOCATION -->
+  <section id="allocation" class="screen" aria-label="Asset allocation">
+    <h1>Your Data Composition</h1>
+    <p class="screen-note">Mock data — illustrative only, not a valuation or an earnings promise. Allocation reflects data you have already consented to share.</p>
+    <div class="two-col">
+      <div class="card">
+        <div id="donutWrap" class="donut-wrap" role="img" aria-label="Donut chart of data composition: Behavioral 42 percent, Health 19 percent, Location 14 percent, Purchase 11 percent, Financial 8 percent, Device Telemetry 6 percent"></div>
+        <p class="donut-center-label">What kind of data am I actually producing?</p>
+      </div>
+      <div class="card">
+        <h2>Allocation</h2>
+        <ul class="legend-list" id="allocationLegend"></ul>
+        <p>Most people have no idea what kind of data they produce. This view answers that
+        question using only data already in your vault under active consent.</p>
+      </div>
+    </div>
+  </section>
+
+  <!-- 3. DATA VALUE HEAT MAP -->
+  <section id="heatmap" class="screen" aria-label="Data value heat map">
+    <h1>Data Value Heat Map</h1>
+    <p class="screen-note">Mock data — illustrative only, not a valuation or an earnings promise. Demand levels are illustrative, not live market data.</p>
+    <div class="card">
+      <table class="data-table">
+        <thead><tr><th>Data Category</th><th>Demand</th><th>Value</th></tr></thead>
+        <tbody>
+          <tr><td>Health Data</td><td><span class="demand-chip very-high">Very High</span></td><td class="value-cell">$$$$$</td></tr>
+          <tr><td>Purchase Intent</td><td><span class="demand-chip high">High</span></td><td class="value-cell">$$$$</td></tr>
+          <tr><td>Financial Behavior</td><td><span class="demand-chip high">High</span></td><td class="value-cell">$$$$</td></tr>
+          <tr><td>Mobility Data</td><td><span class="demand-chip medium">Medium</span></td><td class="value-cell">$$$</td></tr>
+          <tr><td>Social Activity</td><td><span class="demand-chip medium">Medium</span></td><td class="value-cell">$$</td></tr>
+          <tr><td>Device Metadata</td><td><span class="demand-chip low">Low</span></td><td class="value-cell">$</td></tr>
+        </tbody>
+      </table>
+      <p class="legend-note"><span class="swatch red"></span> Red = high demand &nbsp; <span class="swatch blue"></span> Blue = low demand</p>
+    </div>
+  </section>
+
+  <!-- 4. DATA INCOME STATEMENT -->
+  <section id="income" class="screen" aria-label="Data income statement">
+    <h1>Data Income Statement</h1>
+    <p class="screen-note">Mock data — illustrative only, not a valuation or an earnings promise. Like a brokerage dividend report.</p>
+    <div class="card">
+      <h2>This Month</h2>
+      <table class="data-table">
+        <thead><tr><th>Source</th><th>Earnings</th></tr></thead>
+        <tbody>
+          <tr><td>Health Study</td><td>$18</td></tr>
+          <tr><td>Retail Research</td><td>$9</td></tr>
+          <tr><td>AI Training Dataset</td><td>$6</td></tr>
+          <tr><td>Usage Analytics</td><td>$3</td></tr>
+        </tbody>
+        <tfoot><tr><td>Total</td><td>$36</td></tr></tfoot>
+      </table>
+      <p>Only earnings from licenses you have actively consented to appear here.
+      Revoking a license stops future earnings from it.</p>
+    </div>
+  </section>
+
+  <!-- 5. DATA BALANCE SHEET -->
+  <section id="balancesheet" class="screen" aria-label="Data balance sheet">
+    <h1>Data Balance Sheet</h1>
+    <p class="screen-note">Mock data — illustrative only, not a valuation or an earnings promise.</p>
+    <div class="two-col">
+      <div class="card">
+        <h2>Assets</h2>
+        <ul class="plain-list">
+          <li>Verified purchase history</li>
+          <li>Verified mobility profile</li>
+          <li>Health records</li>
+          <li>Identity confidence score</li>
+          <li>Device trust score</li>
+        </ul>
+      </div>
+      <div class="card">
+        <h2>Liabilities</h2>
+        <ul class="plain-list">
+          <li>Privacy exposure</li>
+          <li>Third-party data copies</li>
+          <li>Unrevoked consents</li>
+          <li>Breach risk</li>
+        </ul>
+      </div>
+    </div>
+    <div class="card equity-card">
+      <h2>Data Equity</h2>
+      <dl class="equity-lines">
+        <div><dt>Gross Value</dt><dd>$5,200</dd></div>
+        <div><dt>Risk Adjustment</dt><dd>−$1,800</dd></div>
+        <div class="equity-total"><dt>Net Data Equity</dt><dd>$3,400</dd></div>
+      </dl>
+    </div>
+  </section>
+
+  <!-- 6. DATA DEMAND TERMINAL -->
+  <section id="terminal" class="screen" aria-label="Data demand terminal">
+    <h1>Data Demand Terminal</h1>
+    <p class="screen-note">Mock data — illustrative only, not a valuation or an earnings promise. Demand shown here is illustrative, not live buyer demand.</p>
+    <div class="two-col">
+      <div class="card">
+        <h2>Top Requested Data — Today</h2>
+        <ol class="plain-list numbered">
+          <li>Diabetes tracking data</li>
+          <li>EV charging behavior</li>
+          <li>Grocery purchase patterns</li>
+          <li>Streaming habits</li>
+          <li>Fitness tracking</li>
+        </ol>
+      </div>
+      <div class="card">
+        <h2>Demand Index</h2>
+        <div class="bar-row"><span class="bar-label">Health</span><div class="bar-track"><div class="bar-fill" style="width:100%"></div></div></div>
+        <div class="bar-row"><span class="bar-label">Finance</span><div class="bar-track"><div class="bar-fill" style="width:80%"></div></div></div>
+        <div class="bar-row"><span class="bar-label">Retail</span><div class="bar-track"><div class="bar-fill" style="width:60%"></div></div></div>
+        <div class="bar-row"><span class="bar-label">Gaming</span><div class="bar-track"><div class="bar-fill" style="width:40%"></div></div></div>
+        <div class="bar-row"><span class="bar-label">Media</span><div class="bar-track"><div class="bar-fill" style="width:30%"></div></div></div>
+      </div>
+    </div>
+    <div class="two-col">
+      <div class="card">
+        <h2>Demand Curve — Health Data</h2>
+        <svg class="curve-svg" viewBox="0 0 320 200" role="img" aria-label="Sketch of a demand curve: price rises as supply falls">
+          <line x1="40" y1="10" x2="40" y2="170" stroke="#111" stroke-width="1.5"></line>
+          <line x1="40" y1="170" x2="300" y2="170" stroke="#111" stroke-width="1.5"></line>
+          <text x="8" y="30" font-size="12" fill="#111">Price</text>
+          <text x="240" y="190" font-size="12" fill="#111">Supply</text>
+          <path d="M 55 160 C 120 150, 180 110, 285 35" fill="none" stroke="#2563EB" stroke-width="3"></path>
+          <text x="150" y="60" font-size="12" fill="#2563EB">Demand exceeds supply</text>
+          <text x="150" y="78" font-size="12" fill="#2563EB">→ higher value</text>
+        </svg>
+        <p>Buyers in this mock view: pharmaceutical firms, research universities,
+        insurers, public health studies. Demand exceeds supply, so the category
+        commands a premium in this illustration.</p>
+      </div>
+      <div class="card">
+        <h2>Supply Bottlenecks — Rare Data</h2>
+        <ul class="plain-list">
+          <li>Parkinson's patients</li>
+          <li>Rare cancer survivors</li>
+          <li>EV owners in rural areas</li>
+          <li>High net worth retirees</li>
+          <li>Long-term diabetics</li>
+        </ul>
+        <p class="callout">Your demographic profile is currently in the top 5% demand category.</p>
+        <p>Scarcity is shown for information only. It does not change what you are
+        asked to share, and it never adds a question to onboarding.</p>
+      </div>
+    </div>
+  </section>
+
+  <!-- 7. OPPORTUNITY SCANNER -->
+  <section id="opportunities" class="screen" aria-label="Opportunity scanner">
+    <h1>Opportunity Scanner</h1>
+    <p class="screen-note">Mock data — illustrative only, not a valuation or an earnings promise.</p>
+    <div class="alert-card">
+      <strong>$5-label note:</strong> Values shown on these cards are mock.
+      KICK'S labels every opportunity $5 until real per-study pricing is set.
+      The amounts below are illustrative only — they are not offers, prices, or payouts.
+    </div>
+    <p>Matched to data you have already consented to share. In the real product, the
+    Ask screen shows the exact trade before you agree — what is shared, for how long,
+    and for what — and nothing leaves your vault until you approve.</p>
+    <div class="opp-grid">
+      <div class="card opp-card">
+        <h2>Heart Health Study</h2>
+        <div class="opp-value">$75 <span class="mock-tag">mock</span></div>
+        <p>Matched to consented health data. 24-hour access, revocable anytime.</p>
+      </div>
+      <div class="card opp-card">
+        <h2>Smart Home Usage Study</h2>
+        <div class="opp-value">$28 <span class="mock-tag">mock</span></div>
+        <p>Matched to consented device data. 24-hour access, revocable anytime.</p>
+      </div>
+      <div class="card opp-card">
+        <h2>Veteran Technology Survey</h2>
+        <div class="opp-value">$19 <span class="mock-tag">mock</span></div>
+        <p>Matched to consented survey profile. 24-hour access, revocable anytime.</p>
+      </div>
+      <div class="card opp-card">
+        <h2>Electric Vehicle Behavior Study</h2>
+        <div class="opp-value">$52 <span class="mock-tag">mock</span></div>
+        <p>Matched to consented mobility data. 24-hour access, revocable anytime.</p>
+      </div>
+    </div>
+  </section>
+
+  <!-- 8. PRIVACY RISK DASHBOARD -->
+  <section id="risk" class="screen" aria-label="Privacy risk dashboard">
+    <h1>Privacy Risk Dashboard</h1>
+    <p class="screen-note">Mock data — illustrative only, not a valuation or an earnings promise.</p>
+    <div class="two-col">
+      <div class="card">
+        <h2>Exposure Score</h2>
+        <div class="bar-row"><span class="bar-label">Low Risk</span><div class="bar-track"><div class="bar-fill low" style="width:40%"></div></div></div>
+        <div class="bar-row"><span class="bar-label">Medium Risk</span><div class="bar-track"><div class="bar-fill medium" style="width:70%"></div></div></div>
+        <div class="bar-row"><span class="bar-label">High Risk</span><div class="bar-track"><div class="bar-fill high" style="width:20%"></div></div></div>
+      </div>
+      <div class="card">
+        <h2>Key Metrics</h2>
+        <dl class="metric-list">
+          <div><dt>Number of active licenses</dt><dd><span class="license-count">14</span></dd></div>
+          <div><dt>Data retained by buyers</dt><dd>3 buyers retain data beyond 30 days (mock)</dd></div>
+          <div><dt>Geographic transfers</dt><dd>2 transfers recorded (mock)</dd></div>
+          <div><dt>Re-identification probability</dt><dd>Low — 4% (mock)</dd></div>
+        </dl>
+      </div>
+    </div>
+    <div class="card">
+      <h2>What lowers risk</h2>
+      <p>Revoking a license removes it from your exposure immediately. Fewer active
+      licenses means less data held by others. Nothing here asks you to share more —
+      KICK'S never awards over-sharing.</p>
+    </div>
+  </section>
+
+  <!-- 9. DATA LIQUIDITY METER -->
+  <section id="liquidity" class="screen" aria-label="Data liquidity meter">
+    <h1>Data Liquidity Meter</h1>
+    <p class="screen-note">Mock data — illustrative only, not a valuation or an earnings promise. Liquidity describes how many buyers exist for a category. It is not a promise that your data will sell.</p>
+    <div class="two-col">
+      <div class="card">
+        <h2>Highly Liquid</h2>
+        <p>Lots of buyers. Data in these categories can be matched quickly.</p>
+        <ul class="plain-list">
+          <li>Device telemetry</li>
+          <li>Location history</li>
+          <li>Purchase receipts</li>
+        </ul>
+      </div>
+      <div class="card">
+        <h2>Illiquid</h2>
+        <p>Few buyers. Data in these categories is matched rarely, if at all.</p>
+        <ul class="plain-list">
+          <li>Rare medical datasets</li>
+          <li>Specialized professional data</li>
+          <li>Academic research profiles</li>
+        </ul>
+      </div>
+    </div>
+  </section>
+
+  <!-- 10. DATA PERFORMANCE HISTORY -->
+  <section id="performance" class="screen" aria-label="Data performance history">
+    <h1>Data Performance History</h1>
+    <p class="screen-note">Mock data — illustrative only, not a valuation or an earnings promise. A stock chart for your digital life — illustrative history only.</p>
+    <div class="card">
+      <h2>Portfolio Value</h2>
+      <div id="lineWrap" class="line-wrap" role="img" aria-label="Line chart of mock portfolio value: January 410 dollars, April 620 dollars, July 980 dollars, October 1480 dollars"></div>
+      <table class="data-table">
+        <thead><tr><th>Month</th><th>Portfolio Value</th></tr></thead>
+        <tbody>
+          <tr><td>2026 Jan</td><td>$410</td></tr>
+          <tr><td>2026 Apr</td><td>$620</td></tr>
+          <tr><td>2026 Jul</td><td>$980</td></tr>
+          <tr><td>2026 Oct</td><td>$1,480</td></tr>
+        </tbody>
+      </table>
+      <p>Users suddenly begin understanding: "My behavior patterns have economic value."
+      Past mock performance is not a promise of future value.</p>
+    </div>
+  </section>
+
+  <!-- 11. DATA DIVERSIFICATION INDEX -->
+  <section id="diversification" class="screen" aria-label="Data diversification index">
+    <h1>Data Diversification Index</h1>
+    <p class="screen-note">Mock data — illustrative only, not a valuation or an earnings promise.</p>
+    <div class="two-col">
+      <div class="card">
+        <h2>Over-Concentrated</h2>
+        <p>90% of value comes from:</p>
+        <ul class="plain-list">
+          <li>GPS</li>
+          <li>Shopping</li>
+        </ul>
+        <p>Risk: a buyer leaves the market and most of the value goes with it.</p>
+      </div>
+      <div class="card">
+        <h2>Diversified</h2>
+        <p>Value comes from:</p>
+        <ul class="plain-list">
+          <li>Health</li>
+          <li>Mobility</li>
+          <li>Finance</li>
+          <li>Retail</li>
+          <li>Research</li>
+        </ul>
+        <p>Much more resilient portfolio.</p>
+      </div>
+    </div>
+    <div class="card">
+      <p>Diversification is shown for information only. KICK'S never asks you to share
+      more data to improve a score — we never award over-sharing — and improving
+      diversification is never a reason to add an onboarding question.</p>
+    </div>
+  </section>
+
+  <!-- 12. MARKETPLACE ANALYTICS -->
+  <section id="marketplace" class="screen" aria-label="Marketplace analytics">
+    <h1>Marketplace Analytics</h1>
+    <p class="screen-note">Mock data — illustrative only, not a valuation or an earnings promise. Mock marketplace figures. Price discovery is illustrative.</p>
+    <div class="card">
+      <h2>Market Demand — Users Available</h2>
+      <table class="data-table">
+        <thead><tr><th>Category</th><th>Users Available</th></tr></thead>
+        <tbody>
+          <tr><td>Fitness Users</td><td>250,000</td></tr>
+          <tr><td>EV Drivers</td><td>87,000</td></tr>
+          <tr><td>Diabetes Patients</td><td>21,000</td></tr>
+          <tr><td>Rare Conditions</td><td>2,100</td></tr>
+        </tbody>
+      </table>
+      <p>Researchers and buyers see market demand; price discovery occurs naturally.
+      These counts are illustrative, not live marketplace data.</p>
+    </div>
+  </section>
+
+  <!-- 13. DATA CREDIT RATING -->
+  <section id="credit" class="screen" aria-label="Data credit rating">
+    <h1>Data Credit Rating</h1>
+    <p class="screen-note">Mock data — illustrative only, not a valuation or an earnings promise.</p>
+    <div class="card credit-card">
+      <h2>Portfolio Reliability Score</h2>
+      <div class="grade">AAA Data Contributor</div>
+      <p>Researchers trust the quality of the data. Higher trust means higher
+      compensation in this illustration — the grade is mock, not a guarantee.</p>
+    </div>
+    <div class="card">
+      <h2>Score Factors</h2>
+      <ul class="plain-list">
+        <li>Verified identity</li>
+        <li>Device consistency</li>
+        <li>Data completeness — reflects data you have already consented to share. It is not a prompt to add more.</li>
+        <li>Historical participation</li>
+      </ul>
+    </div>
+  </section>
+</main>
+
+<footer class="app-footer">
+  <p>KICK'S Consumer Data Portfolio — mock prototype. All figures are illustrative.
+  Not a valuation, not an earnings promise. Built only from data you have already
+  consented to share; revoke anytime. This prototype adds zero onboarding questions.</p>
+</footer>
+
+<script src="app.js"></script>
+</body>
+</html>
