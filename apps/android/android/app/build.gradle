@@ -98,6 +98,7 @@ android {
         buildConfigField "String", "REACT_NATIVE_RELEASE_LEVEL", "\"${findProperty('reactNativeReleaseLevel') ?: 'stable'}\""
         buildConfigField "boolean", "COLLECTOR_ENABLED", "${findProperty('kicks.collectorEnabled') ?: 'false'}"
         buildConfigField "String", "COLLECTOR_API_BASE_URL", "\"${findProperty('kicks.collectorApiBaseUrl') ?: ''}\""
+        buildConfigField "boolean", "BARRIER_ENABLED", "${findProperty('kicks.barrierEnabled') ?: 'false'}"
     }
     signingConfigs {
         debug {
