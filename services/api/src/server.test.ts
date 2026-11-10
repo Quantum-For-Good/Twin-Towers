@@ -205,6 +205,48 @@ test('ingestion requires active purpose consent and blocks replay',async()=>{con
 test('revocation immediately blocks ingestion and preserves decision history',async()=>{const{app,store,token}=await setup(),permissionId=randomUUID(),headers={authorization:`Bearer ${token}`};await app.inject({method:'PUT',url:'/v1/data-sharing',headers,payload:{dataSharing:true}});const decision=(action:'grant'|'revoke')=>app.inject({method:'POST',url:'/v1/consent-events',headers,payload:{permissionId,requestId:randomUUID(),...(action==='grant'?{expiresAt:grantExpiry()}:{}),action,policyVersion:'privacy-1',purposeVersion:'network-safety-1',purpose:'Detect unexpected data destinations'}});assert.equal((await decision('grant')).statusCode,202);assert.equal((await decision('revoke')).statusCode,202);const payload={batchId:randomUUID(),schemaVersion:'2026-08-01',observations:[{eventId:randomUUID(),occurredAt:new Date().toISOString(),sourceApp:'com.example.app',attribution:'verified',destinationHost:'api.example.com',protocol:'tls',bytesBucket:'1-10KB',classification:'expected',consentId:permissionId,consentPurpose:'Detect unexpected data destinations'}]};assert.equal((await app.inject({method:'POST',url:'/v1/metadata-batches',headers,payload})).statusCode,403);const history=await app.inject({method:'GET',url:`/v1/consent-events/${permissionId}`,headers});assert.equal(history.statusCode,200);assert.equal(history.json().events.length,2);assert.deepEqual(history.json().events.map((event:any)=>event.action),['grant','revoke']);assert.equal(store.observations.length,0);await app.close()});
 test('payload fields fail the minimization contract',async()=>{const{app,token}=await setup();const r=await app.inject({method:'POST',url:'/v1/metadata-batches',headers:{authorization:`Bearer ${token}`},payload:{batchId:randomUUID(),schemaVersion:'2026-08-01',observations:[{payload:'secret'}]}});assert.equal(r.statusCode,400);await app.close()});
 
+test('declined consent never authorizes ingestion', async () => {
+  const { app, store, token } = await setup();
+  const permissionId = randomUUID();
+  const headers = { authorization: ['Bearer', token].join(' ') };
+  await app.inject({ method: 'PUT', url: '/v1/data-sharing', headers, payload: { dataSharing: true } });
+  const decision = await app.inject({
+    method: 'POST',
+    url: '/v1/consent-events',
+    headers,
+    payload: {
+      permissionId,
+      requestId: randomUUID(),
+      action: 'deny',
+      policyVersion: 'privacy-1',
+      purposeVersion: 'network-safety-1',
+      purpose: 'Detect unexpected data destinations'
+    }
+  });
+  assert.equal(decision.statusCode, 202);
+  const batch = {
+    batchId: randomUUID(),
+    schemaVersion: '2026-08-01',
+    observations: [{
+      eventId: randomUUID(),
+      occurredAt: new Date().toISOString(),
+      sourceApp: 'com.example.app',
+      attribution: 'verified',
+      destinationHost: 'api.example.com',
+      protocol: 'tls',
+      bytesBucket: '1-10KB',
+      classification: 'expected',
+      consentId: permissionId,
+      consentPurpose: 'Detect unexpected data destinations'
+    }]
+  };
+  const upload = await app.inject({ method: 'POST', url: '/v1/metadata-batches', headers, payload: batch });
+  assert.equal(upload.statusCode, 403);
+  assert.equal(upload.json().error, 'active_purpose_consent_required');
+  assert.equal(store.observations.length, 0);
+  await app.close();
+});
+
 test('intelligence and value engine endpoints satisfy openapi contract', async () => {
   const app = buildServer({ allowSyntheticDevelopmentEvents: true });
 
