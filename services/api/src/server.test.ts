@@ -521,3 +521,105 @@ test('GET eligibility and data-sharing reject unauthenticated callers', async ()
   assert.equal((await app.inject({ method: 'PUT', url: '/v1/data-sharing', payload: { dataSharing: true } })).statusCode, 401);
   await app.close();
 });
+
+test('barrier decisions require device authentication', async () => {
+  const { app } = await setup();
+  const r = await app.inject({
+    method: 'POST', url: '/v1/barrier-decisions',
+    payload: { batchId: randomUUID(), schemaVersion: '2026-11-10', decisions: [] }
+  });
+  assert.equal(r.statusCode, 401);
+  await app.close();
+});
+
+test('barrier decisions accept allow and block and block replay', async () => {
+  const { app, store, token } = await setup();
+  const permissionId = randomUUID();
+  const headers = { authorization: `Bearer ${token}` };
+  await app.inject({ method: 'POST', url: '/v1/consent-events', headers, payload: { permissionId, requestId: randomUUID(), action: 'grant', policyVersion: 'privacy-1', purposeVersion: 'network-safety-1', purpose: 'Detect unexpected data destinations' } });
+  const payload = {
+    batchId: randomUUID(), schemaVersion: '2026-11-10',
+    decisions: [
+      { eventId: randomUUID(), occurredAt: new Date().toISOString(), destinationHost: 'api.example.com', decision: 'allow', reason: null, consentId: permissionId },
+      { eventId: randomUUID(), occurredAt: new Date().toISOString(), destinationHost: 'tracker.example.net', decision: 'block', reason: 'CONSENT_NOT_GRANTED', consentId: permissionId }
+    ]
+  };
+  assert.equal((await app.inject({ method: 'POST', url: '/v1/barrier-decisions', headers, payload })).statusCode, 202);
+  assert.equal(store.barrierDecisions.length, 2);
+  assert.equal((await app.inject({ method: 'POST', url: '/v1/barrier-decisions', headers, payload })).statusCode, 409);
+  await app.close();
+});
+
+test('barrier decisions accept records under a revoked consent', async () => {
+  // The ledger is history, not collected data: a block recorded after revocation is a
+  // true record and must still be ingested. (The metadata path would reject this.)
+  const { app, store, token } = await setup();
+  const permissionId = randomUUID();
+  const headers = { authorization: `Bearer ${token}` };
+  const decision = (action: 'grant' | 'revoke') => app.inject({ method: 'POST', url: '/v1/consent-events', headers, payload: { permissionId, requestId: randomUUID(), action, policyVersion: 'privacy-1', purposeVersion: 'network-safety-1', purpose: 'Detect unexpected data destinations' } });
+  assert.equal((await decision('grant')).statusCode, 202);
+  assert.equal((await decision('revoke')).statusCode, 202);
+  const payload = {
+    batchId: randomUUID(), schemaVersion: '2026-11-10',
+    decisions: [{ eventId: randomUUID(), occurredAt: new Date().toISOString(), destinationHost: 'tracker.example.net', decision: 'block', reason: 'CONSENT_NOT_GRANTED', consentId: permissionId }]
+  };
+  assert.equal((await app.inject({ method: 'POST', url: '/v1/barrier-decisions', headers, payload })).statusCode, 202);
+  assert.equal(store.barrierDecisions.length, 1);
+  await app.close();
+});
+
+test('barrier decisions reject a consent owned by another subject', async () => {
+  const first = await setup();
+  const second = await setup();
+  const permissionId = randomUUID();
+  const secondHeaders = { authorization: `Bearer ${second.token}` };
+  await second.app.inject({ method: 'POST', url: '/v1/consent-events', headers: secondHeaders, payload: { permissionId, requestId: randomUUID(), action: 'grant', policyVersion: 'privacy-1', purposeVersion: 'network-safety-1', purpose: 'Detect unexpected data destinations' } });
+  const payload = {
+    batchId: randomUUID(), schemaVersion: '2026-11-10',
+    decisions: [{ eventId: randomUUID(), occurredAt: new Date().toISOString(), destinationHost: 'api.example.com', decision: 'allow', reason: null, consentId: permissionId }]
+  };
+  const r = await first.app.inject({ method: 'POST', url: '/v1/barrier-decisions', headers: { authorization: `Bearer ${first.token}` }, payload });
+  assert.equal(r.statusCode, 403);
+  assert.equal(r.json().error, 'consent_not_found');
+  assert.equal(first.store.barrierDecisions.length, 0);
+  await first.app.close();
+  await second.app.close();
+});
+
+test('barrier decisions reject an allow without a consent id', async () => {
+  const { app, token } = await setup();
+  const headers = { authorization: `Bearer ${token}` };
+  const payload = {
+    batchId: randomUUID(), schemaVersion: '2026-11-10',
+    decisions: [{ eventId: randomUUID(), occurredAt: new Date().toISOString(), destinationHost: 'api.example.com', decision: 'allow', reason: null, consentId: null }]
+  };
+  const r = await app.inject({ method: 'POST', url: '/v1/barrier-decisions', headers, payload });
+  assert.equal(r.statusCode, 400);
+  assert.equal(r.json().error, 'allow_requires_consent_id');
+  await app.close();
+});
+
+test('barrier decisions accept a block without a consent id', async () => {
+  // No consent ever existed: the block is still recorded, with a null consent id.
+  const { app, store, token } = await setup();
+  const headers = { authorization: `Bearer ${token}` };
+  const payload = {
+    batchId: randomUUID(), schemaVersion: '2026-11-10',
+    decisions: [{ eventId: randomUUID(), occurredAt: new Date().toISOString(), destinationHost: 'tracker.example.net', decision: 'block', reason: 'NO_SESSION', consentId: null }]
+  };
+  assert.equal((await app.inject({ method: 'POST', url: '/v1/barrier-decisions', headers, payload })).statusCode, 202);
+  assert.equal(store.barrierDecisions.length, 1);
+  assert.equal(store.barrierDecisions[0]?.consentId, null);
+  await app.close();
+});
+
+test('barrier decisions reject extra fields', async () => {
+  const { app, token } = await setup();
+  const headers = { authorization: `Bearer ${token}` };
+  const payload = {
+    batchId: randomUUID(), schemaVersion: '2026-11-10',
+    decisions: [{ eventId: randomUUID(), occurredAt: new Date().toISOString(), destinationHost: 'api.example.com', decision: 'allow', reason: null, consentId: randomUUID(), sourceApp: 'com.example.app' }]
+  };
+  assert.equal((await app.inject({ method: 'POST', url: '/v1/barrier-decisions', headers, payload })).statusCode, 400);
+  await app.close();
+});
