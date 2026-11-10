@@ -1,0 +1,96 @@
+# Gemini API — Extracted Reference
+
+Extracted from the full Gemini API documentation (single file, 335,605 lines, 8.9 MB) downloaded 2026-11-06 from https://aistudio.google.com/llms-full.txt and saved in Dropbox at `/gemini-api-docs-full.txt`. Local copies: `~/workspace/gemini-api-docs-full.txt` (full) and `~/workspace/gemini-api-docs-index.txt` (417-line index of every page). Model names, endpoints, and defaults below are as stated in that download — check the live docs before building on a preview model.
+
+## The rules (from the docs themselves)
+- **Canonical SDK:** `google-genai` — `pip install google-genai` or `npm install @google/genai`. Never use deprecated `google-generativeai` or `@google/generative-ai`.
+- **Default API:** the **Interactions API** (`client.interactions`). `generateContent` still works but is legacy. Pages labeled `(generateContent)` cover legacy; `(v1)` is the stable v1 reference; unlabeled pages cover Interactions + v1beta.
+- Every docs page is available as clean markdown by appending `.md` to its URL.
+- OpenAI-compatible endpoints exist (`/v1beta/openai/chat/completions`) — standard OpenAI SDKs can call Gemini models.
+
+## Quick start
+```bash
+export GEMINI_API_KEY=<redacted>
+pip install -U google-genai        # Python
+npm install @google/genai          # JavaScript
+```
+```python
+from google import genai
+client = genai.Client()
+interaction = client.interactions.create(
+    model="gemini-3.8-flash",
+    input="Explain how AI works in a few words")
+print(interaction.output_text)
+```
+```javascript
+import { GoogleGenAI } from "@google/genai";
+const ai = new GoogleGenAI({});
+const interaction = await ai.interactions.create({
+  model: "gemini-3.8-flash",
+  input: "Explain how AI works in a few words",
+});
+console.log(interaction.output_text);
+```
+- Get a key at https://aistudio.google.com/apikey (AI Studio creates a project + key). Paid tier = set up Cloud Billing, prepay minimum $5; higher rate limits. Usage at AI Studio Dashboard > Usage.
+
+## REST surface
+- Base: `https://generativelanguage.googleapis.com` — `/v1beta` (Interactions API) and `/v1` (stable).
+- Auth: API key (`?key=` or `x-goog-api-key` header); OAuth / credentials for managed agents.
+- Resources: `interactions` (default call), `models` (`:generateContent`, `:streamGenerateContent`, `:embedContent`), `files`, `cachedContents`, `fileSearchStores` (RAG), `agents`, `environments`, `credentials`, `auth_tokens`, `triggers`, `webhooks`, `voices`.
+
+## Models — current flagships (full list: 50+ in the docs)
+| Model | For |
+|---|---|
+| **gemini-4-argon** (Gemini 4 Argon) | Latest flagship — coding, reasoning, agents; 1M shared context window, long decode past 64K tokens |
+| **gemini-3.8-flash** | Current fast default |
+| **gemini-3.1-pro-preview** / **gemini-3-pro-preview** | Pro reasoning previews |
+| **gemini-3.8-flash-tts** / **gemini-3.8-flash-lite-tts** | Text-to-speech; voice design, replication, remixing |
+| **gemini-3.8-live** / **gemini-3.8-live-extended-thinking** | Live API real-time audio-to-audio dialogue |
+| **gemini-3.5-transcribe** | Speech-to-text transcription |
+| **gemini-nano-banana-2.1** / **gemini-3.1-flash-image** (Nano Banana 2) | Image generation + editing |
+| **gemini-3-pro-image** (Nano Banana Pro) | Pro image generation |
+| **veo-3.1** / **veo-3.1-lite-preview** | Video generation with native audio |
+| **gemini-omni-flash** | Fast conversational video generation + editing |
+| **lyria-3.5** / **lyria-3-clip-preview** / **lyria-realtime-exp** | Music generation (incl. real-time streaming) |
+| **gemini-embedding-2** | Embeddings for search / classification |
+| **gemini-2.5-pro** / **gemini-2.5-flash** / **gemini-2.0-flash** | Previous stable generations |
+| **gemini-2.5-computer-use-preview** | Computer use (screen control) |
+| **gemini-robotics-er-2** | Robotics: spatial reasoning, agentic vision, orchestration |
+| **deep-research-pro-preview** / **deep-research-max-preview** | Long-running research agents |
+- **Imagen is shut down** — migrate image work to Nano Banana.
+- Older 2.x / 3.x Flash + Lite variants exist for cost-sensitive work; check pricing + deprecations pages before choosing one.
+
+## Core capabilities
+- **Text:** multi-turn interactions, streaming, background execution (`background=true` for long jobs).
+- **Multimodal:** image + video understanding, document (PDF) processing, audio understanding.
+- **Thinking:** reasoning / thinking mode, thought signatures preserved across multi-step interactions.
+- **Structured output:** schema-constrained JSON.
+- **Function calling:** tools + custom functions, combinable with built-in tools.
+- **Long context:** 1M-token window; long decode with Gemini 4 Argon up to the full window.
+- **Grounding:** Google Search (with citations), Google Maps, URL context.
+- **Tools:** code execution, file search (RAG over fileSearchStores), computer use.
+- **Files API:** upload / manage media files for multimodal input.
+- **Token counting, context caching, Batch API, webhooks, Flex inference (cheaper, latency-tolerant), Priority inference (business-critical).**
+
+## Agents (managed)
+- Build agents that reason, write code, manage files, browse the web. Managed agents API + Antigravity agent (multi-step tasks, file ops, tool use). Custom agents, remote sandbox **environments**, server-side **credentials** (bearer / OAuth2 / env secrets), synchronous **hooks** (intercept tool calls for security / audit), Deep Research agent.
+
+## Live API (real-time)
+- Low-latency voice + video, bidirectional WebSocket or GenAI SDK. Capabilities: session management, tool use, thinking, live transcription, live translate (speech-to-speech), ephemeral tokens for client-side auth.
+
+## Media generation
+- **Images:** Nano Banana / Nano Banana Pro (generate + edit).
+- **Video:** Veo 3.1 (high-fidelity, native audio), Gemini Omni Flash (fast conversational video gen/edit).
+- **Music:** Lyria 3.5 + Lyria Clip; Lyria RealTime for streaming generation; prompt guide in docs.
+- **Speech:** TTS with multi-speaker audio, custom voice personas (voice design), voice replication (persistent voice IDs), voice remixing.
+
+## Agent tooling (for coding assistants)
+- **Gemini Docs MCP server:** `npx add-mcp "https://gemini-api-docs-mcp.dev"` — live doc search.
+- **Skills repo:** https://github.com/google-gemini/gemini-skills — `gemini-api-dev`, `gemini-live-api-dev`; `npx skills add google-gemini/gemini-skills --skill gemini-api-dev`.
+- **Gemini API CLI** (`gemini-api`): stateless shell client — generate media, analyze files, run background managed agents, no project dependencies. Install: `curl -fsSL https://raw.githubusercontent.com/google-gemini/gemini-api-cli/main/scripts/install.sh | bash` (macOS/Linux). Not an interactive coding agent; it runs inside one.
+
+## Limits, billing, safety
+- Pricing: https://aistudio.google.com/docs/pricing.md. Rate limits / quotas: docs/rate-limits.md. Release notes + deprecations pages track model/feature retirements. Safety settings are configurable per call (content filters / thresholds).
+
+## How this maps to KICK'S (notes, not a decision)
+- Nothing here is wired into KICKS yet. If Gemini is used in the project, the natural fits are: text/reasoning for the Intelligence layer, embeddings + file search for RAG over consented data, TTS for reel/podcast voice work, and image/video generation for reels — all server-side with the API key held server-side, never in the apps. Any use that touches user data must go through the Ask / Modify / Receipt consent flow first. No key exists yet and none was created in this extraction.
