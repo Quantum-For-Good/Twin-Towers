@@ -127,7 +127,7 @@ test('metadata ingestion rejects expired grants before storing a batch', async (
       if (sql.includes('FROM devices')) return { rows: [{ id: randomUUID() }] };
       if (sql.includes('FROM data_sharing')) return { rows: [{ enabled: true }] };
       if (sql.includes('FROM consent_events')) return { rows: [{
-        subject_id: randomUUID(), action: 'grant', purpose: 'Detect unexpected data destinations',
+        subject_id: device.subjectId, action: 'grant', purpose: 'Detect unexpected data destinations',
         expires_at: new Date(Date.now() - 1_000)
       }] };
       return { rows: [] };
