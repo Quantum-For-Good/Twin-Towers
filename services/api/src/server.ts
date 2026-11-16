@@ -41,6 +41,20 @@ const hash=(v:string)=>createHash('sha256').update(v).digest('hex');const equal=
 const decision=z.object({permissionId:z.string().uuid(),requestId:z.string().uuid(),expectedEventSequence:z.number().int().nonnegative().optional(),studyId:z.string().min(1).max(120).optional(),scope:z.record(z.boolean()).optional(),priceCents:z.number().int().nonnegative().max(100_000).optional(),expiresAt:z.string().datetime().optional(),action:z.enum(['grant','deny','revoke']),policyVersion:z.string().min(1).max(64),purposeVersion:z.string().min(1).max(64),purpose:z.string().min(3).max(120)}).strict().superRefine((value,context)=>{if(value.action==='grant'&&!value.expiresAt)context.addIssue({code:'custom',path:['expiresAt'],message:'grant_expiry_required'})});
 const batch=z.object({batchId:z.string().uuid(),schemaVersion:z.literal('2026-08-01'),observations:z.array(observation).min(1).max(250)}).strict();
 
+// Memory-store replay equality, mirroring PostgresConsentRepository.recordDecision:
+// scope keys compared independently of order, expiries compared as timestamps,
+// while preserving the distinction between an omitted value and an empty one.
+const scopeEqual = (left: Record<string, boolean> | undefined, right: Record<string, boolean> | undefined): boolean => {
+  if (left === undefined || right === undefined) return left === right;
+  const leftKeys = Object.keys(left).sort();
+  const rightKeys = Object.keys(right).sort();
+  return leftKeys.length === rightKeys.length && leftKeys.every((key, index) => key === rightKeys[index] && left[key] === right[key]);
+};
+const expiryEqual = (left: string | undefined, right: string | undefined): boolean => {
+  if (left === undefined || right === undefined) return left === right;
+  return Date.parse(left) === Date.parse(right);
+};
+
 export function buildServer(options:{store?:Store;adminSecret?:string;intelligenceEngine?:IntelligenceEngine;walletEngine?:WalletEngine;permissionsEngine?:PermissionsEngine;consentRepository?:ConsentRepository;deviceRepository?:DeviceRepository;metadataRepository?:MetadataRepository;dataSharingRepository?:DataSharingRepository;phase0PostgresAuthorization?:boolean;collectorAuthorization?:CollectorAuthorizationService;onCollectorStop?:(subjectId:string)=>void;allowSyntheticDevelopmentEvents?:boolean}={}){
   const store=options.store??memoryStore();
   const adminSecret=options.adminSecret??process.env.KICKS_STAGING_ADMIN_SECRET??'';
@@ -203,8 +217,8 @@ export function buildServer(options:{store?:Store;adminSecret?:string;intelligen
             duplicate.permissionId !== input.permissionId || duplicate.action !== input.action ||
             duplicate.policyVersion !== input.policyVersion || duplicate.purposeVersion !== input.purposeVersion ||
             duplicate.purpose !== input.purpose || duplicate.studyId !== input.studyId ||
-            JSON.stringify(duplicate.scope) !== JSON.stringify(input.scope) || duplicate.priceCents !== input.priceCents ||
-            duplicate.expiresAt !== input.expiresAt || duplicate.expectedEventSequence !== input.expectedEventSequence) {
+            !scopeEqual(duplicate.scope, input.scope) || duplicate.priceCents !== input.priceCents ||
+            !expiryEqual(duplicate.expiresAt, input.expiresAt) || duplicate.expectedEventSequence !== input.expectedEventSequence) {
             return r.code(409).send({ error: 'idempotency_key_reused_with_different_request' });
           }
           return r.code(202).send({ ...duplicate, status: 'accepted', idempotentReplay: true });
