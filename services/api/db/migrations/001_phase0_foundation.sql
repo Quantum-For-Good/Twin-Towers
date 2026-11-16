@@ -33,6 +33,7 @@ CREATE TABLE consent_events (
   CHECK (action <> 'grant' OR expires_at IS NOT NULL)
 );
 CREATE INDEX consent_events_permission_sequence_idx ON consent_events (permission_id, event_sequence DESC);
+CREATE INDEX consent_events_subject_permission_sequence_idx ON consent_events (subject_id, permission_id, event_sequence DESC);
 
 CREATE TABLE data_sharing (
   subject_id uuid PRIMARY KEY,
