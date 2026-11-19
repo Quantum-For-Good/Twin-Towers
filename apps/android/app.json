@@ -16,7 +16,10 @@
       }
     },
     "extra": {
-      "trafficMode": "demo"
+      "trafficMode": "demo",
+      "eas": {
+        "projectId": "734560bb-01fa-49c9-a371-fa3386ccde1b"
+      }
     },
     "owner": "datastorm-inc"
   }
