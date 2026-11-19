@@ -1,0 +1,11 @@
+node_modules/
+.expo/
+dist/
+*.log
+.env
+.env.*
+!.env.example
+credentials.json
+*.jks
+*.keystore
+*.p12

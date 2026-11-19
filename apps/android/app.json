@@ -6,11 +6,21 @@
     "version": "0.2.5",
     "orientation": "portrait",
     "userInterfaceStyle": "automatic",
-    "plugins": ["expo-router"],
+    "plugins": [
+      "expo-router"
+    ],
     "android": {
       "package": "com.datastorm.kicks",
-      "adaptiveIcon": { "backgroundColor": "#081A18" }
+      "adaptiveIcon": {
+        "backgroundColor": "#081A18"
+      }
     },
-    "extra": { "trafficMode": "demo" }
+    "extra": {
+      "trafficMode": "demo",
+      "eas": {
+        "projectId": "734560bb-01fa-49c9-a371-fa3386ccde1b"
+      }
+    },
+    "owner": "datastorm-inc"
   }
 }
