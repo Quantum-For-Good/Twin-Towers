@@ -12,7 +12,7 @@
     "build": "npm run build:web --workspace @kicks/mobile && node -e \"const fs=require('fs'); fs.mkdirSync('dist',{recursive:true}); fs.cpSync('apps/android/dist','dist',{recursive:true});\"",
     "start": "npm run start --workspace @kicks/api",
     "typecheck": "npm run typecheck --workspaces --if-present",
-    "test": "npm run test --workspaces --if-present"
+    "test": "node --test packages/consent-preview/model.test.mjs && npm run test --workspaces --if-present"
   },
   "engines": {
     "node": ">=20"

@@ -12,7 +12,7 @@ export type ConsentDecision = {
   purposeVersion: string;
   purpose: string;
 };
-export type ConsentEvent = ConsentDecision & { id: string; occurredAt: string; eventSequence?: number };
+export type ConsentEvent = ConsentDecision & { id: string; occurredAt: string; eventSequence: number; idempotentReplay?: true };
 export type CurrentConsent = {
   // `id` is retained as a permission-id compatibility alias for older adapters.
   id?: string;
@@ -55,7 +55,7 @@ export class PostgresConsentRepository implements ConsentRepository {
           throw error;
         }
         await client.query('COMMIT');
-        return { ...input, id: row.id, eventSequence: Number(row.event_sequence), occurredAt: new Date(row.occurred_at).toISOString() };
+        return { ...input, id: row.id, eventSequence: Number(row.event_sequence), occurredAt: new Date(row.occurred_at).toISOString(), idempotentReplay: true };
       }
       const prior = await client.query<{ subject_id: string }>(
         'SELECT subject_id FROM consent_events WHERE permission_id = $1 ORDER BY event_sequence DESC LIMIT 1',

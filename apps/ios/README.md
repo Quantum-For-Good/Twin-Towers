@@ -40,9 +40,11 @@ on the tab bar). The iOS app wraps the tabs in a `SessionProvider`
   except where the iOS lineage moved ahead (session stack, Profile / Account /
   My Devices screens, `settings.tsx` rendering `IosCollectorControls` on iOS).
   Files identical to `apps/android/` are noted in `docs/IOS_BRINGOVER_NOTES.md`.
-- **Shared with Android, not duplicated here:** nothing is imported across
-  apps — each app is self-contained. If a shared file changes, change it in
-  both apps or extract it in a follow-up.
+- **Shared with Android:** `packages/consent-preview` supplies the floating ASK
+  preview to both apps. The examples do not create consent, share data, or
+  create a wallet receipt. Real grant and revocation controls remain unavailable
+  until secure device enrollment and server-enforced study scope and expiry are
+  implemented.
 
 ## Auth
 

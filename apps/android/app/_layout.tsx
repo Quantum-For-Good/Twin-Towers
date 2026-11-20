@@ -1,5 +1,7 @@
 import { Tabs } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
+import { View } from 'react-native';
+import { ConsentPreview } from '../../../packages/consent-preview/ConsentPreview';
 
 const icons: Record<string, keyof typeof Ionicons.glyphMap> = {
   index: 'home-outline', engine: 'scan-outline', permissions: 'shield-checkmark-outline',
@@ -8,7 +10,7 @@ const icons: Record<string, keyof typeof Ionicons.glyphMap> = {
 
 export default function Layout() {
   return (
-    <Tabs screenOptions={({ route }) => ({
+    <View style={{ flex: 1 }}><Tabs screenOptions={({ route }) => ({
       headerShown: false,
       tabBarStyle: { backgroundColor: '#0b0b0d', borderTopColor: '#3a2114', height: 66, paddingTop: 5 },
       tabBarActiveTintColor: '#ff6a00', tabBarInactiveTintColor: '#9c8c82',
@@ -20,6 +22,6 @@ export default function Layout() {
       <Tabs.Screen name="opportunities" options={{ title: 'Opportunities' }} />
       <Tabs.Screen name="wallet" options={{ title: 'Wallet' }} />
       <Tabs.Screen name="settings" options={{ title: 'Settings' }} />
-    </Tabs>
+    </Tabs><ConsentPreview /></View>
   );
 }
