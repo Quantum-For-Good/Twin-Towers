@@ -1,5 +1,6 @@
 import type { Pool } from 'pg';
 import type { DeviceRecord } from './device-repository.js';
+import { lockDataSharing } from './data-sharing-repository.js';
 
 export type MetadataObservation = {
   eventId: string;
@@ -30,12 +31,22 @@ export class PostgresMetadataRepository implements MetadataRepository {
     try {
       await client.query('BEGIN');
       const activeDevice = await client.query<{ id: string }>(
-        'SELECT id FROM devices WHERE id = $1 AND subject_id = $2 AND revoked_at IS NULL FOR UPDATE',
+        'SELECT id FROM devices WHERE id = $1 AND subject_id = $2 AND revoked_at IS NULL FOR NO KEY UPDATE',
         [device.id, device.subjectId]
       );
       if (!activeDevice.rows[0]) {
         const error = new Error('device_not_active');
         (error as Error & { code?: string }).code = 'DEVICE_NOT_ACTIVE';
+        throw error;
+      }
+
+      await lockDataSharing(client, device.subjectId);
+      const sharing = await client.query<{ enabled: boolean }>(
+        'SELECT enabled FROM data_sharing WHERE subject_id = $1 FOR SHARE', [device.subjectId]
+      );
+      if (sharing.rows[0]?.enabled !== true) {
+        const error = new Error('data_sharing_disabled');
+        (error as Error & { code?: string }).code = 'DATA_SHARING_DISABLED';
         throw error;
       }
 
@@ -47,14 +58,15 @@ export class PostgresMetadataRepository implements MetadataRepository {
 
       for (const permissionId of permissionIds) {
         const latest = await client.query<{
-          subject_id: string; action: 'grant' | 'deny' | 'revoke'; purpose: string;
+          subject_id: string; action: 'grant' | 'deny' | 'revoke'; purpose: string; expires_at: Date | null;
         }>(
-          'SELECT subject_id, action, purpose FROM consent_events WHERE permission_id = $1 ORDER BY event_sequence DESC LIMIT 1',
+          'SELECT subject_id, action, purpose, expires_at FROM consent_events WHERE permission_id = $1 ORDER BY event_sequence DESC LIMIT 1',
           [permissionId]
         );
         const consent = latest.rows[0];
         const matching = batch.observations.filter(item => item.consentId === permissionId);
         if (!consent || consent.subject_id !== device.subjectId || consent.action !== 'grant' ||
+          !consent.expires_at || consent.expires_at.getTime() <= Date.now() ||
           matching.some(item => item.consentPurpose !== consent.purpose)) {
           const error = new Error('active_purpose_consent_required');
           (error as Error & { code?: string }).code = 'ACTIVE_PURPOSE_CONSENT_REQUIRED';
