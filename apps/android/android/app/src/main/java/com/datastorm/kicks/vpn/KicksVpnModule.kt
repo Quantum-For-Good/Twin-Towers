@@ -2,6 +2,7 @@ package com.datastorm.kicks.vpn
 
 import android.content.Intent
 import android.net.VpnService
+import com.datastorm.kicks.vpn.core.BarrierReason
 import com.datastorm.kicks.vpn.core.Reason
 import com.datastorm.kicks.vpn.core.Session
 import com.datastorm.kicks.vpn.core.State
@@ -68,6 +69,66 @@ class KicksVpnModule(private val context: ReactApplicationContext) : ReactContex
     promise.resolve("stopped")
   }
 
+  /**
+   * Explicit user activation of the Gated Fail-Closed Lock. Resolves "starting" only; the UI
+   * must poll [getBarrierStatus] and treat enforcement as on only when the native state is
+   * "active". Independent of the collector: the barrier can run with the collector off, and
+   * stopping it never stops the collector.
+   */
+  @ReactMethod
+  fun startBarrier(promise: Promise) {
+    val b = BarrierRuntime.get(context)
+    if (!b.configured) {
+      promise.reject("BARRIER_NOT_CONFIGURED", "The barrier is disabled until the build enables it and an https endpoint is configured.")
+      return
+    }
+    if (VpnService.prepare(context) != null) {
+      promise.reject("VPN_AUTH_REQUIRED", "Android VPN authorization is required.")
+      return
+    }
+    if (components.sessions.current() == null) {
+      promise.reject("NO_SESSION", "Sign in and connect this device before starting the barrier.")
+      return
+    }
+    if (b.controller.state == State.ACTIVE || b.controller.state == State.STARTING) {
+      promise.resolve("starting")
+      return
+    }
+    b.gate.activate()
+    try {
+      context.startForegroundService(Intent(context, KicksVpnService::class.java).setAction(KicksVpnService.ACTION_START_BARRIER))
+    } catch (e: Exception) {
+      b.gate.deactivate()
+      promise.reject("SERVICE_START_FAILED", "Android refused to start the barrier service.")
+      return
+    }
+    promise.resolve("starting")
+  }
+
+  @ReactMethod
+  fun stopBarrier(promise: Promise) {
+    BarrierRuntime.get(context).controller.explicitStop()
+    promise.resolve("stopped")
+  }
+
+  @ReactMethod
+  fun getBarrierStatus(promise: Promise) {
+    val b = BarrierRuntime.get(context)
+    val s = b.controller.status()
+    val map = Arguments.createMap()
+    map.putString("state", s.state.name.lowercase())
+    if (s.reason != null) map.putString("reason", s.reason.name) else map.putNull("reason")
+    map.putDouble("allowedDns", s.allowedDns.toDouble())
+    map.putDouble("blockedDns", s.blockedDns.toDouble())
+    map.putDouble("blockedPackets", s.blockedPackets.toDouble())
+    map.putInt("ledgerQueued", s.ledgerQueued)
+    map.putDouble("ledgerDropped", s.ledgerDropped.toDouble())
+    map.putBoolean("barrierConfigured", b.configured)
+    map.putBoolean("sessionPresent", components.sessions.current() != null)
+    map.putBoolean("vpnAuthorized", components.os.vpnAuthorized())
+    promise.resolve(map)
+  }
+
   @ReactMethod
   fun getStatus(promise: Promise) {
     val c = components
@@ -94,7 +155,10 @@ class KicksVpnModule(private val context: ReactApplicationContext) : ReactContex
     }
     try {
       val current = c.sessions.current()
-      if (current != null && current.accountId != accountId) c.controller.stop(Reason.CROSS_ACCOUNT_REJECTED)
+      if (current != null && current.accountId != accountId) {
+        c.controller.stop(Reason.CROSS_ACCOUNT_REJECTED)
+        BarrierRuntime.get(context).controller.stop(BarrierReason.CROSS_ACCOUNT_REJECTED)
+      }
       c.sessions.save(Session(accountId, deviceId, token, expiresAtMs.toLong()))
       c.gate.invalidate()
       promise.resolve("saved")
@@ -107,6 +171,7 @@ class KicksVpnModule(private val context: ReactApplicationContext) : ReactContex
   @ReactMethod
   fun clearSession(promise: Promise) {
     components.sessions.clear()
+    BarrierRuntime.get(context).controller.stop(BarrierReason.NO_SESSION)
     components.controller.stop(Reason.NO_SESSION)
     promise.resolve("cleared")
   }

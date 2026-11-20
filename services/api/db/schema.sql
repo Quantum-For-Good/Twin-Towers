@@ -18,6 +18,23 @@ CREATE TABLE metadata_observations (
 );
 REVOKE UPDATE, DELETE ON metadata_batches, metadata_observations FROM PUBLIC;
 
+-- Barrier ledger (Gated Fail-Closed Lock). Separate from the metadata batches and from
+-- the consent ledger: one row per DNS gate decision. Append-only like the other
+-- ledgers. consent_id is nullable by design: an allow always carries the live grant's
+-- id, a block carries the last-known grant's id, or null when no consent ever existed.
+CREATE TABLE barrier_batches (
+  id uuid PRIMARY KEY, device_id uuid NOT NULL REFERENCES devices(id), schema_version text NOT NULL,
+  received_at timestamptz NOT NULL DEFAULT now(), decision_count integer NOT NULL CHECK (decision_count BETWEEN 1 AND 250)
+);
+CREATE TABLE barrier_decisions (
+  id uuid PRIMARY KEY, batch_id uuid NOT NULL REFERENCES barrier_batches(id), consent_id uuid,
+  occurred_at timestamptz NOT NULL, destination_host text NOT NULL,
+  decision text NOT NULL CHECK (decision IN ('allow','block')),
+  reason text CHECK (reason IS NULL OR char_length(reason) BETWEEN 1 AND 64),
+  CHECK (destination_host !~ '[/?:#]')
+);
+REVOKE UPDATE, DELETE ON barrier_batches, barrier_decisions FROM PUBLIC;
+
 CREATE TABLE ledger_entries (
   id uuid PRIMARY KEY, transaction_id uuid NOT NULL, account_id uuid NOT NULL,
   direction text NOT NULL CHECK (direction IN ('debit','credit')),

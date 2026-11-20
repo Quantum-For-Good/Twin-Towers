@@ -26,6 +26,7 @@ import { KICKS_BRAND_MANIFEST } from './branding.js';
 import type { ConsentEvent, ConsentRepository } from './consent-repository.js';
 import type { DeviceRepository } from './device-repository.js';
 import type { MetadataRepository } from './metadata-repository.js';
+import type { BarrierDecision, BarrierRepository } from './barrier-repository.js';
 import { CollectorAuthorizationError, CollectorAuthorizationService } from './collector-authorization.js';
 import type { CollectorAuthorizationRequest, CollectorAuthorizationResult } from './collector-authorization.js';
 
@@ -34,12 +35,14 @@ export type CollectorAuditEntry={at:string;operation:string;deviceId:string;stat
 
 type Device={id:string;subjectId:string;tokenHash:string;revoked:boolean};type Consent={id:string;decisionId?:string;decisionVersion?:string;subjectId:string;purpose:string;policyVersion:string;purposeVersion:string;state:'granted'|'revoked'};
 const observation=z.object({eventId:z.string().uuid(),occurredAt:z.string().datetime(),sourceApp:z.string().min(1).max(180).nullable(),attribution:z.enum(['verified','best_effort','unknown']),destinationHost:z.string().regex(/^(?=.{1,253}$)(?!-)[a-z0-9.-]+(?<!-)$/),protocol:z.enum(['dns','tcp','udp','tls','quic','other']),bytesBucket:z.enum(['0-1KB','1-10KB','10-100KB','100KB-1MB','1MB+']),classification:z.enum(['expected','review','unpermissioned','unknown']),consentId:z.string().uuid(),consentPurpose:z.string().min(3).max(120)}).strict();
-type Observation=z.infer<typeof observation>;export interface Store{devices:Map<string,Device>;consents:Map<string,Consent>;consentHistory:ConsentEvent[];consentRequests:Map<string,ConsentEvent>;batches:Set<string>;observations:Observation[];collectorAudit:CollectorAuditEntry[];dataSharing:Map<string,boolean>};export const memoryStore=():Store=>({devices:new Map(),consents:new Map(),consentHistory:[],consentRequests:new Map(),batches:new Set(),observations:[],collectorAudit:[],dataSharing:new Map()});
+type Observation=z.infer<typeof observation>;export interface Store{devices:Map<string,Device>;consents:Map<string,Consent>;consentHistory:ConsentEvent[];consentRequests:Map<string,ConsentEvent>;batches:Set<string>;observations:Observation[];barrierBatches:Set<string>;barrierDecisions:BarrierDecision[];collectorAudit:CollectorAuditEntry[];dataSharing:Map<string,boolean>};export const memoryStore=():Store=>({devices:new Map(),consents:new Map(),consentHistory:[],consentRequests:new Map(),batches:new Set(),observations:[],barrierBatches:new Set(),barrierDecisions:[],collectorAudit:[],dataSharing:new Map()});
 const hash=(v:string)=>createHash('sha256').update(v).digest('hex');const equal=(a:string,b:string)=>{const x=Buffer.from(a),y=Buffer.from(b);return x.length===y.length&&timingSafeEqual(x,y)};
 const decision=z.object({permissionId:z.string().uuid(),requestId:z.string().uuid(),expectedEventSequence:z.number().int().nonnegative().optional(),action:z.enum(['grant','deny','revoke']),policyVersion:z.string().min(1).max(64),purposeVersion:z.string().min(1).max(64),purpose:z.string().min(3).max(120)}).strict();
 const batch=z.object({batchId:z.string().uuid(),schemaVersion:z.literal('2026-08-01'),observations:z.array(observation).min(1).max(250)}).strict();
+const barrierDecision=z.object({eventId:z.string().uuid(),occurredAt:z.string().datetime(),destinationHost:z.string().regex(/^(?=.{1,253}$)(?!-)[a-z0-9.-]+(?<!-)$/),decision:z.enum(['allow','block']),reason:z.string().min(1).max(64).nullable(),consentId:z.string().uuid().nullable()}).strict();
+const barrierBatch=z.object({batchId:z.string().uuid(),schemaVersion:z.literal('2026-11-10'),decisions:z.array(barrierDecision).min(1).max(250)}).strict();
 
-export function buildServer(options:{store?:Store;adminSecret?:string;intelligenceEngine?:IntelligenceEngine;walletEngine?:WalletEngine;permissionsEngine?:PermissionsEngine;consentRepository?:ConsentRepository;deviceRepository?:DeviceRepository;metadataRepository?:MetadataRepository;collectorAuthorization?:CollectorAuthorizationService;onCollectorStop?:(subjectId:string)=>void;allowSyntheticDevelopmentEvents?:boolean}={}){
+export function buildServer(options:{store?:Store;adminSecret?:string;intelligenceEngine?:IntelligenceEngine;walletEngine?:WalletEngine;permissionsEngine?:PermissionsEngine;consentRepository?:ConsentRepository;deviceRepository?:DeviceRepository;metadataRepository?:MetadataRepository;barrierRepository?:BarrierRepository;collectorAuthorization?:CollectorAuthorizationService;onCollectorStop?:(subjectId:string)=>void;allowSyntheticDevelopmentEvents?:boolean}={}){
   const store=options.store??memoryStore();
   const adminSecret=options.adminSecret??process.env.KICKS_STAGING_ADMIN_SECRET??'';
   const engine = options.intelligenceEngine ?? new IntelligenceEngine();
@@ -152,6 +155,55 @@ const response:{eligible:true;state:'ELIGIBLE';deviceId:string;permissionId:stri
   const handleDenied=(error:unknown)=>{if(error instanceof CollectorAuthorizationError){auditDenied('metadata.ingest',device.id,error.result,count,q.log);return sendDenied(r,error.result)}return null};
   if(options.metadataRepository){try{await authorizeAll()}catch(error){const denied=handleDenied(error);if(denied)return denied;throw error}try{const result=await options.metadataRepository.ingestBatch(device,parsed.data,authorizeAll);return r.code(202).send(result)}catch(error){const denied=handleDenied(error);if(denied)return denied;const code=(error as {code?:string})?.code;if(code==='BATCH_REPLAY')return r.code(409).send({error:'replay_detected'});if(code==='ACTIVE_PURPOSE_CONSENT_REQUIRED')return r.code(403).send({error:'active_purpose_consent_required'});if(code==='DEVICE_NOT_ACTIVE')return r.code(401).send({error:'device_not_active'});q.log.error({err:error},'metadata persistence failed');return r.header('retry-after','1').code(503).send({error:'metadata_persistence_unavailable',retryable:true})}}if(store.batches.has(parsed.data.batchId))return r.code(409).send({error:'replay_detected'});const consentAllows=async(item:Observation)=>{let consent:Consent|null=store.consents.get(item.consentId)??null;if(options.consentRepository){const current=await options.consentRepository.getCurrent(item.consentId);consent=current?{id:item.consentId,decisionId:current.decisionId,decisionVersion:current.decisionVersion,subjectId:current.subjectId,purpose:current.purpose,policyVersion:current.policyVersion,purposeVersion:current.purposeVersion,state:current.state}:null}return !!consent&&consent.subjectId===device.subjectId&&consent.state==='granted'&&consent.purpose===item.consentPurpose};for(const item of parsed.data.observations){let allowed:boolean;try{allowed=await consentAllows(item)}catch(error){q.log.error({err:error},'consent verification failed');return r.header('retry-after','1').code(503).send({error:'consent_verification_unavailable',retryable:true})}if(!allowed)return r.code(403).send({error:'active_purpose_consent_required',eventId:item.eventId})}
   try{await authRequests.reduceRight<()=>Promise<void>>((next,request)=>()=>collectorAuth.runAuthorized(request,()=>next()),async()=>{if(store.batches.has(parsed.data.batchId))throw Object.assign(new Error('replay'),{code:'BATCH_REPLAY'});for(const item of parsed.data.observations){const consent=store.consents.get(item.consentId);if(!consent||consent.subjectId!==device.subjectId||consent.state!=='granted'||consent.purpose!==item.consentPurpose)throw Object.assign(new Error('consent'),{code:'ACTIVE_PURPOSE_CONSENT_REQUIRED'})}store.batches.add(parsed.data.batchId);store.observations.push(...parsed.data.observations)})()}catch(error){const denied=handleDenied(error);if(denied)return denied;const code=(error as {code?:string})?.code;if(code==='BATCH_REPLAY')return r.code(409).send({error:'replay_detected'});if(code==='ACTIVE_PURPOSE_CONSENT_REQUIRED')return r.code(403).send({error:'active_purpose_consent_required'});throw error}return r.code(202).send({batchId:parsed.data.batchId,accepted:count})});
+
+  // POST /v1/barrier-decisions — the barrier ledger. Device-bearer authenticated.
+  // Separate from the metadata batches and from the consent ledger: gate decisions only.
+  // The consent check here is ownership, not an active grant (see barrier-repository.ts):
+  // a decision recorded under a consent that is later revoked is still a true historical
+  // record. An allow must carry the live grant's consent id; a block may carry the
+  // last-known grant's id, or null when no consent ever existed.
+  app.post('/v1/barrier-decisions', async (q, r) => {
+    let device: Awaited<ReturnType<typeof authenticate>>;
+    try { device = await authenticate(q.headers.authorization, deviceContextHeader(q.headers)); } catch (error) { q.log.error({ err: error }, 'device authentication unavailable'); return r.header('retry-after', '1').code(503).send({ error: 'device_authentication_unavailable', retryable: true }); }
+    if (!device) return r.code(401).send({ error: 'unauthorized' });
+    const parsed = barrierBatch.safeParse(q.body);
+    if (!parsed.success) return r.code(400).send({ error: 'invalid_or_non_minimized_barrier_decisions', issues: parsed.error.issues });
+    for (const item of parsed.data.decisions) {
+      if (item.decision === 'allow' && item.consentId === null) return r.code(400).send({ error: 'allow_requires_consent_id', eventId: item.eventId });
+    }
+    const count = parsed.data.decisions.length;
+    if (options.barrierRepository) {
+      try {
+        const result = await options.barrierRepository.ingestBatch(device, parsed.data);
+        return r.code(202).send(result);
+      } catch (error) {
+        const code = (error as { code?: string })?.code;
+        if (code === 'BATCH_REPLAY') return r.code(409).send({ error: 'replay_detected' });
+        if (code === 'CONSENT_NOT_FOUND') return r.code(403).send({ error: 'consent_not_found' });
+        if (code === 'DEVICE_NOT_ACTIVE') return r.code(401).send({ error: 'device_not_active' });
+        q.log.error({ err: error }, 'barrier persistence failed');
+        return r.header('retry-after', '1').code(503).send({ error: 'barrier_persistence_unavailable', retryable: true });
+      }
+    }
+    if (store.barrierBatches.has(parsed.data.batchId)) return r.code(409).send({ error: 'replay_detected' });
+    const consentOwns = async (item: BarrierDecision) => {
+      if (item.consentId === null) return true;
+      let consent: Consent | null = store.consents.get(item.consentId) ?? null;
+      if (options.consentRepository) {
+        const current = await options.consentRepository.getCurrent(item.consentId);
+        consent = current ? { id: item.consentId, decisionId: current.decisionId, decisionVersion: current.decisionVersion, subjectId: current.subjectId, purpose: current.purpose, policyVersion: current.policyVersion, purposeVersion: current.purposeVersion, state: current.state } : null;
+      }
+      return !!consent && consent.subjectId === device.subjectId;
+    };
+    for (const item of parsed.data.decisions) {
+      let owns: boolean;
+      try { owns = await consentOwns(item); } catch (error) { q.log.error({ err: error }, 'consent verification failed'); return r.header('retry-after', '1').code(503).send({ error: 'consent_verification_unavailable', retryable: true }); }
+      if (!owns) return r.code(403).send({ error: 'consent_not_found', eventId: item.eventId });
+    }
+    store.barrierBatches.add(parsed.data.batchId);
+    store.barrierDecisions.push(...parsed.data.decisions);
+    return r.code(202).send({ batchId: parsed.data.batchId, accepted: count });
+  });
 
   // Intelligence & Value Engine Endpoints
   app.post('/v1/intelligence/events', async (req, reply) => {
