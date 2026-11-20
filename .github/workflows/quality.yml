@@ -21,10 +21,7 @@ jobs:
           --health-timeout 5s
           --health-retries 5
     env:
-      # Keep both names during the KICKS_DISPOSABLE_DATABASE_URL ->
-      # KICKS_TEST_DATABASE_URL transition so either test revision runs.
       KICKS_DISPOSABLE_DATABASE_URL: 'postgresql://kicks_test@127.0.0.1:5433/kicks_disposable_test'
-      KICKS_TEST_DATABASE_URL: 'postgresql://kicks_test@127.0.0.1:5433/kicks_disposable_test'
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-node@v4
@@ -35,7 +32,6 @@ jobs:
       - name: Require disposable PostgreSQL test configuration
         run: |
           test -n "$KICKS_DISPOSABLE_DATABASE_URL"
-          test -n "$KICKS_TEST_DATABASE_URL"
       - run: npm test
   collector-core:
     runs-on: ubuntu-latest

@@ -77,13 +77,11 @@ either password directly in a command-line argument.
 
 From the repository root, set the URL for the local test process only. Replace
 `<URL-safe-password>` below with the `kicks_test` password chosen above; do not
-copy the placeholder literally. Both names are set for compatibility with the
-current and follow-up integration-test revisions.
+copy the placeholder literally.
 
 ```powershell
 $TestUrl = 'postgresql://kicks_test:<URL-safe-password>@127.0.0.1:5433/kicks_disposable_test'
 $env:KICKS_DISPOSABLE_DATABASE_URL = $TestUrl
-$env:KICKS_TEST_DATABASE_URL = $TestUrl
 
 npm ci
 npm run typecheck
@@ -92,14 +90,13 @@ npm run test --workspace @kicks/api
 
 The database URL guard rejects other hosts, ports, database names, and URL
 parameters. Record the tested commit, PostgreSQL version, command, and test
-summary; do not include the URL or either password in the evidence. A skipped
+summary; do not include the URL or the password in the evidence. A skipped
 integration test is not a pass.
 
 After the run, clear the process environment and stop only this new cluster:
 
 ```powershell
 Remove-Item Env:\KICKS_DISPOSABLE_DATABASE_URL -ErrorAction SilentlyContinue
-Remove-Item Env:\KICKS_TEST_DATABASE_URL -ErrorAction SilentlyContinue
 & (Join-Path $PgBin 'pg_ctl.exe') -D $DataDir -m fast -w stop
 ```
 

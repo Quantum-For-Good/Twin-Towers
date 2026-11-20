@@ -19,17 +19,15 @@ verification. The separate evidence-provider path still requires chain proof.
 
 The integration test only accepts a disposable URL with host `127.0.0.1`, port
 `5433`, database `kicks_disposable_test`, and no URL query parameters. The
-current test reads `KICKS_DISPOSABLE_DATABASE_URL`; the follow-up naming uses
-`KICKS_TEST_DATABASE_URL`. During that transition, set both names to the same
-disposable URL. Never use `KICKS_DATABASE_URL` for this test. The test creates
+test reads `KICKS_DISPOSABLE_DATABASE_URL`. Never use `KICKS_DATABASE_URL` for this test. The test creates
 and removes uniquely named schemas, verifies migrated tables and migration
 history, and checks that a failed migration rolls its schema changes back.
 
 The `quality` workflow starts an isolated PostgreSQL service for the test,
-publishes it only on runner port `5433`, and fails early if either test variable
+publishes it only on runner port `5433`, and fails early if the test variable
 is missing. Locally, run
-`npm run test --workspace @kicks/api` with the disposable variable(s) set;
-without one, the integration test is skipped, not passed.
+`npm run test --workspace @kicks/api` with the disposable variable set;
+without it, the integration test is skipped, not passed.
 
 For the approved Windows D: drive disposable run, follow
 [`DISPOSABLE_POSTGRES_WINDOWS.md`](DISPOSABLE_POSTGRES_WINDOWS.md). It creates
